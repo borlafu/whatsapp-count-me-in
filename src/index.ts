@@ -3,6 +3,19 @@ const { Client, LocalAuth } = pkg;
 import * as qrcode from 'qrcode';
 import { handleCommand } from './commands.js';
 import type { Message } from 'whatsapp-web.js';
+import fs from 'fs';
+import path from 'path';
+
+// Cleanup Chromium lock files from previous unclean shutdowns
+const lockFile = path.join(process.cwd(), '.wwebjs_auth', 'session', 'SingletonLock');
+if (fs.existsSync(lockFile)) {
+    try {
+        fs.unlinkSync(lockFile);
+        console.log('Cleaned up residual Chromium lock file.');
+    } catch (err) {
+        console.error('Failed to clean up lock file:', err);
+    }
+}
 
 const client = new Client({
     authStrategy: new LocalAuth(),
