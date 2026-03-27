@@ -21,6 +21,26 @@ A simple WhatsApp bot for managing event sign-ups and waitlists in groups.
 
 ## Setup
 
+The recommended way to run the bot is using the pre-built Docker image. This ensures a stable environment with all required headless Chromium dependencies.
+
+### Using Docker (Recommended)
+
+1. Create a persistent file for the database to avoid permission issues, and start the container:
+   ```bash
+   touch events.db
+   
+   docker run -it --rm \
+     -v $(pwd)/.wwebjs_auth:/app/.wwebjs_auth \
+     -v $(pwd)/events.db:/app/events.db \
+     borlafu/whatsapp-count-me-in
+   ```
+
+2. Scan the QR code displayed in the terminal with your WhatsApp mobile app (Linked Devices).
+3. The session is automatically saved to `.wwebjs_auth` and events to `events.db`.
+4. Add the connected number to a WhatsApp group and start managing events!
+
+### Local Development
+
 1. Install dependencies:
    ```bash
    npm install
@@ -31,9 +51,6 @@ A simple WhatsApp bot for managing event sign-ups and waitlists in groups.
    npm start
    ```
 
-3. Scan the QR code displayed in the terminal with your WhatsApp mobile app (Linked Devices).
-
-4. Add the bot (your phone number) to a group and start managing events!
 
 ## Technology
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js)
