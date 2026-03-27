@@ -11,11 +11,17 @@ const sessionDir = path.join(process.cwd(), '.wwebjs_auth', 'session');
 if (fs.existsSync(sessionDir)) {
     ['SingletonLock', 'SingletonCookie', 'SingletonSocket'].forEach(file => {
         const lockFile = path.join(sessionDir, file);
-        if (fs.existsSync(lockFile)) {
-            try {
+        try {
+            // Do NOT use fs.existsSync() here! 
+            // SingletonLock is a symlink. When the container dies, it becomes a broken symlink.
+            // fs.existsSync() returns FALSE for broken symlinks, causing us to skip deletion.
+            // fs.lstatSync or just attempting unlinkSync is required.
+            if (fs.lstatSync(lockFile)) {
                 fs.unlinkSync(lockFile);
                 console.log(`Cleaned up residual Chromium lock file: ${file}`);
-            } catch (err) {
+            }
+        } catch (err: any) {
+            if (err.code !== 'ENOENT') {
                 console.error(`Failed to clean up lock file ${file}:`, err);
             }
         }
