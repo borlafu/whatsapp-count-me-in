@@ -40,6 +40,9 @@ interface MessageTemplates {
 
   // Promotion
   slotOpened: (mention: string, title: string) => string;
+
+  // Help
+  helpMessage: () => string;
 }
 
 const messages: Record<Locale, MessageTemplates> = {
@@ -68,6 +71,16 @@ const messages: Record<Locale, MessageTemplates> = {
     statusPendingTag: () => '(Pending)',
     statusWaitlist: () => '⏳ *Waitlist:*',
     slotOpened: (mention, title) => `🔊 Attention @${mention}! A slot opened up for "${title}".\nReply with !join to confirm or !leave to decline.`,
+    helpMessage: () =>
+      `📖 *Count Me In — Commands*\n\n` +
+      `*!create "Title" <slots>*  — Create an event (admin only)\n` +
+      `*!join*  — Sign up for the active event\n` +
+      `*!waitlist*  — Join the waitlist directly\n` +
+      `*!leave*  — Withdraw from the event\n` +
+      `*!status*  — View event status & participants\n` +
+      `*!cancel*  — Cancel the active event (admin only)\n` +
+      `*!lang en|es*  — Change bot language (admin only)\n` +
+      `*!help*  — Show this message`,
   },
   es: {
     adminOnly: () => 'Solo los administradores del grupo pueden hacer esto.',
@@ -94,6 +107,16 @@ const messages: Record<Locale, MessageTemplates> = {
     statusPendingTag: () => '(Pendiente)',
     statusWaitlist: () => '⏳ *Lista de espera:*',
     slotOpened: (mention, title) => `🔊 ¡Atención @${mention}! Se ha liberado una plaza en "${title}".\nResponde con !unirse para confirmar o !salir para rechazar.`,
+    helpMessage: () =>
+      `📖 *Count Me In — Comandos*\n\n` +
+      `*!crear "Título" <plazas>*  — Crear un evento (solo admins)\n` +
+      `*!unirse*  — Apuntarse al evento activo\n` +
+      `*!espera*  — Unirse a la lista de espera\n` +
+      `*!salir*  — Retirarse del evento\n` +
+      `*!estado*  — Ver estado y participantes\n` +
+      `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
+      `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
+      `*!ayuda*  — Mostrar este mensaje`,
   },
 };
 

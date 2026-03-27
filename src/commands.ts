@@ -50,6 +50,9 @@ export async function handleCommand(message: Message, client: Client) {
       case 'lang':
         await handleLang(message, chat, userId, args, client);
         break;
+      case 'help':
+        await safeReply(message, chat, client, t(locale, 'helpMessage'));
+        break;
       default:
         break;
     }
