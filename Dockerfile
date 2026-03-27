@@ -41,4 +41,4 @@ COPY . .
 # The session and DB are expected to be mounted as volumes:
 #   -v /host/path/.wwebjs_auth:/app/.wwebjs_auth
 #   -v /host/path/events.db:/app/events.db
-CMD ["npm", "start"]
+CMD ["node", "--import", "tsx", "src/index.ts"]
