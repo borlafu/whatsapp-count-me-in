@@ -22,15 +22,13 @@ const client = new Client({
 });
 
 client.on('qr', async (qr: string) => {
-    console.log('QR RECEIVED (length):', qr.length);
     console.log('Scan this QR code with your WhatsApp app:');
     try {
-        const qrContent = await qrcode.toString(qr, { type: 'terminal', small: true });
-        console.log(qrContent);
+        console.log(await qrcode.toString(qr, { type: 'terminal', small: true }));
     } catch (err) {
         console.error('Failed to generate QR code:', err);
+        console.log('Raw QR data:', qr);
     }
-    console.log('If the QR code is not visible, use this raw data:', qr);
 });
 
 client.on('ready', () => {
