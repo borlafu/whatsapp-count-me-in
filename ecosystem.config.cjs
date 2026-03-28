@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'whatsapp-count-me-in',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: 'dist/index.js',
       watch: false,
       autorestart: true,
       restart_delay: 5000,       // wait 5s before restarting after a crash
@@ -12,7 +12,6 @@ module.exports = {
       max_memory_restart: '800M', // restart if RAM goes above 800MB (protect the 1GB Oracle VM)
       env: {
         NODE_ENV: 'production',
-        NODE_OPTIONS: '--no-deprecation',
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       error_file: './logs/error.log',

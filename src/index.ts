@@ -1,83 +1,69 @@
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import * as qrcode from 'qrcode';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { handleCommand } from './commands.js';
-import type { Message } from 'whatsapp-web.js';
-import fs from 'fs';
-import path from 'path';
+import pino from 'pino';
+import * as qrcode from 'qrcode';
 
-// Cleanup all Chromium lock files from previous unclean shutdowns
-const sessionDir = path.join(process.cwd(), '.wwebjs_auth', 'session');
-if (fs.existsSync(sessionDir)) {
-    ['SingletonLock', 'SingletonCookie', 'SingletonSocket'].forEach(file => {
-        const lockFile = path.join(sessionDir, file);
-        try {
-            // Do NOT use fs.existsSync() here! 
-            // SingletonLock is a symlink. When the container dies, it becomes a broken symlink.
-            // fs.existsSync() returns FALSE for broken symlinks, causing us to skip deletion.
-            // fs.lstatSync or just attempting unlinkSync is required.
-            if (fs.lstatSync(lockFile)) {
-                fs.unlinkSync(lockFile);
-                console.log(`Cleaned up residual Chromium lock file: ${file}`);
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('.auth_info_baileys');
+    const { version } = await fetchLatestBaileysVersion();
+
+    const sock = makeWASocket({
+        version,
+        logger: pino({ level: 'silent' }),
+        auth: state,
+        syncFullHistory: false, // Save memory
+        generateHighQualityLinkPreview: false,
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            console.log('Scan this QR code with your WhatsApp app:');
+            try {
+                console.log(await qrcode.toString(qr, { type: 'terminal', small: true }));
+            } catch (err) {
+                console.error('Failed to generate QR code:', err);
+                console.log('Raw QR data:', qr);
             }
-        } catch (err: any) {
-            if (err.code !== 'ENOENT') {
-                console.error(`Failed to clean up lock file ${file}:`, err);
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Connection closed due to ', lastDisconnect?.error?.message);
+            if (shouldReconnect) {
+                console.log('Reconnecting...');
+                // Wait a bit before reconnecting
+                setTimeout(connectToWhatsApp, 3000);
+            } else {
+                console.log('Logged out. Please delete .auth_info_baileys and restart to re-authenticate.');
+                process.exit(0);
+            }
+        } else if (connection === 'open') {
+            console.log('WhatsApp Count Me In is ready!');
+        }
+    });
+
+    sock.ev.on('messages.upsert', async (m) => {
+        if (m.type !== 'notify') return;
+        for (const msg of m.messages) {
+            if (!msg.message) continue;
+
+            try {
+                await handleCommand(msg, sock);
+            } catch (err) {
+                console.error('Error handling message:', err);
             }
         }
     });
 }
 
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--no-zygote',
-            '--no-first-run',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-            '--disable-accelerated-2d-canvas',
-            '--disable-dev-shm-usage',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--disable-background-timer-throttling',
-            '--disk-cache-size=0',
-            '--media-cache-size=0',
-            '--disable-remote-fonts',
-        ],
-        ignoreDefaultArgs: ['--disable-background-networking'],
-    }
-});
+// Cleanup wwebjs auth just in case the user forgets
+import fs from 'fs';
+if (fs.existsSync('.wwebjs_auth')) {
+    console.log('Found old wwebjs_auth directory. You can delete it manually to save space.');
+}
 
-client.on('qr', async (qr: string) => {
-    console.log('Scan this QR code with your WhatsApp app:');
-    try {
-        console.log(await qrcode.toString(qr, { type: 'terminal', small: true }));
-    } catch (err) {
-        console.error('Failed to generate QR code:', err);
-        console.log('Raw QR data:', qr);
-    }
-});
-
-client.on('ready', () => {
-    console.log('WhatsApp Count Me In is ready!');
-});
-
-client.on('message', async (msg: Message) => {
-    try {
-        await handleCommand(msg, client);
-    } catch (err) {
-        console.error('Error handling message:', err);
-    }
-});
-
-client.on('disconnected', async (reason) => {
-    console.warn('Disconnected:', reason);
-    await client.destroy();
-    await client.initialize();
-});
-
-client.initialize();
+connectToWhatsApp();

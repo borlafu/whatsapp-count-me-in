@@ -4,5 +4,6 @@ node_modules
 *.db-journal
 .wwebjs_auth
 .wwebjs_cache
+.auth_info_baileys
 dist/
 logs/
