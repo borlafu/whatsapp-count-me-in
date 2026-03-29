@@ -135,10 +135,10 @@ export class CommandHandler {
 
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
     
-    if ((result as any).promotion) {
-      const p = (result as any).promotion;
+    if (result.promotion) {
+      const p = result.promotion;
       await sock.sendMessage(chatId, {
-        text: t(locale, 'slotOpened', p.userId.split('@')[0], p.eventTitle),
+        text: t(locale, 'slotOpened', p.userId.split('@')[0] ?? '', p.eventTitle),
         mentions: [p.userId]
       });
     }
@@ -157,7 +157,7 @@ export class CommandHandler {
     if (!result.success) {
       return await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
     }
-    const data = (result as any).data;
+    const data = result.data!;
     const joined = data.participants.filter((p: any) => p.status === 'joined' || p.status === 'pending_promotion');
     const waitlisted = data.participants.filter((p: any) => p.status === 'waitlisted');
 

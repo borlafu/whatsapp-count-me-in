@@ -1,11 +1,23 @@
 import { DatabaseManager, type Participant } from './Database.js';
 
+export interface StatusData {
+  title: string;
+  slots: number;
+  participants: Participant[];
+}
+
 export interface ServiceResult {
   success: boolean;
   messageKey: string;
   params?: any[];
   mentions?: string[];
   showStatus?: boolean;
+  promotion?: {
+    userId: string;
+    userName: string;
+    eventTitle: string;
+  };
+  data?: StatusData;
 }
 
 export class EventService {
@@ -90,7 +102,7 @@ export class EventService {
       const next = this.db.getNextInWaitlist(event.id);
       if (next) {
         this.db.updateParticipantStatus(event.id, next.user_id, 'pending_promotion');
-        (result as any).promotion = {
+        (result as ServiceResult).promotion = {
           userId: next.user_id,
           userName: next.user_name,
           eventTitle: event.title
@@ -109,7 +121,7 @@ export class EventService {
     return { success: true, messageKey: 'eventCancelled', params: [event.title] };
   }
 
-  getStatus(chatId: string): ServiceResult | { success: true, data: any } {
+  getStatus(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEventStatus' };
 

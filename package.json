@@ -19,8 +19,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "better-sqlite3": "^12.8.0",
     "pino": "^10.3.1",
-    "qrcode": "^1.5.4",
-    "tsx": "^4.21.0"
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -28,6 +27,7 @@
     "@types/qrcode": "^1.5.6",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.2",
+    "tsx": "^4.21.0"
   }
 }

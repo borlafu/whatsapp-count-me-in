@@ -1,6 +1,6 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, type WAMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import * as qrcode from 'qrcode';
+import qrcode from 'qrcode';
 import fs from 'fs';
 import { DatabaseManager } from './Database.js';
 import { EventService } from './EventService.js';
@@ -66,11 +66,6 @@ class WhatsAppBot {
       }
     });
   }
-}
-
-// Cleanup old wwebjs auth if exists
-if (fs.existsSync('.wwebjs_auth')) {
-  console.log('Found old wwebjs_auth directory. You can delete it manually to save space.');
 }
 
 const bot = new WhatsAppBot();
