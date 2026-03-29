@@ -8,7 +8,7 @@ RUN apk add --no-cache python3 make g++
 
 # Install all dependencies (including dev for TypeScript build)
 COPY package*.json ./
-RUN npm ci --include=dev
+RUN npm ci
 
 # Copy source and build
 COPY tsconfig.json .
