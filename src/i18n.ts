@@ -12,6 +12,7 @@ interface MessageTemplates {
   // Create
   createUsage: () => string;
   eventCreated: (title: string, slots: number) => string;
+  activeEventExists: () => string;
 
   // Join
   noActiveEvent: () => string;
@@ -53,6 +54,7 @@ const messages: Record<Locale, MessageTemplates> = {
     langInvalid: () => 'Supported languages: en, es',
     createUsage: () => 'Usage: !create "Event Title" [Max Slots]',
     eventCreated: (title, slots) => `✅ Event "${title}" created!\nSlots: ${slots}\nUse !join to sign up.`,
+    activeEventExists: () => 'There is already an active event in this group.',
     noActiveEvent: () => 'No active event in this group.',
     alreadyJoined: () => 'You are already signed up.',
     alreadyWaitlisted: () => 'You are already on the waitlist.',
@@ -89,6 +91,7 @@ const messages: Record<Locale, MessageTemplates> = {
     langInvalid: () => 'Idiomas disponibles: en, es',
     createUsage: () => 'Uso: !crear "Título del Evento" [Plazas]',
     eventCreated: (title, slots) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\nUsa !unirse para apuntarte.`,
+    activeEventExists: () => 'Ya hay un evento activo en este grupo.',
     noActiveEvent: () => 'No hay ningún evento activo en este grupo.',
     alreadyJoined: () => 'Ya estás apuntado/a.',
     alreadyWaitlisted: () => 'Ya estás en la lista de espera.',
