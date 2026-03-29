@@ -1,7 +1,6 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, type WAMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode';
-import fs from 'fs';
 import { DatabaseManager } from './Database.js';
 import { EventService } from './EventService.js';
 import { CommandHandler } from './CommandHandler.js';
