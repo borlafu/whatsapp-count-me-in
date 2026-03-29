@@ -2,8 +2,7 @@ node_modules
 .DS_Store
 *.db
 *.db-journal
-.wwebjs_auth
-.wwebjs_cache
+.vscode/
 .auth_info_baileys
 dist/
 logs/
