@@ -9,7 +9,7 @@ export interface ServiceResult {
 }
 
 export class EventService {
-  constructor(private db: DatabaseManager) {}
+  constructor(private db: DatabaseManager) { }
 
   createEvent(chatId: string, title: string, slots: number, userId: string): ServiceResult {
     const existing = this.db.getActiveEvent(chatId);
@@ -44,7 +44,7 @@ export class EventService {
     }
 
     const participants = this.db.getParticipants(event.id);
-    const joinedCount = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion').length;
+    const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
 
     if (!forceWaitlist && joinedCount < event.slots) {
       this.db.addParticipant(event.id, userId, userName, 'joined');
@@ -78,7 +78,7 @@ export class EventService {
 
     const oldStatus = participant.status;
     this.db.withdrawParticipant(event.id, userId);
-    
+
     const result: ServiceResult = {
       success: true,
       messageKey: 'withdrawn',
