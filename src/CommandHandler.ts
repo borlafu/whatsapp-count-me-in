@@ -1,0 +1,186 @@
+import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
+import { jidNormalizedUser } from '@whiskeysockets/baileys';
+import type { DatabaseManager } from './Database.js';
+import { t, type Locale } from './i18n.js';
+import { resolveCommand } from './commandAliases.js';
+import type { EventService } from './EventService.js';
+
+export class CommandHandler {
+  constructor(
+    private eventService: EventService,
+    private db: DatabaseManager
+  ) {}
+
+  async handleCommand(msg: WAMessage, sock: WASocket) {
+    try {
+      if (!msg.key) return;
+      const chatId = msg.key.remoteJid;
+      if (!chatId || !chatId.endsWith('@g.us')) return;
+
+      let senderId = msg.key.participant;
+      if (msg.key.fromMe) {
+        senderId = sock.user?.id;
+      }
+      if (!senderId) return;
+
+      senderId = jidNormalizedUser(senderId);
+      const userName: string = msg.pushName || senderId.split('@')[0] || 'Unknown';
+      const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
+      if (!body.startsWith('!')) return;
+
+      const [rawCommand, ...args] = body.split(' ');
+      if (!rawCommand) return;
+      const action = resolveCommand(rawCommand.toLowerCase());
+      if (!action) return;
+
+      const locale = this.db.getLocale(chatId);
+
+      switch (action) {
+        case 'create':
+          await this.handleCreate(msg, chatId, senderId, sock, locale);
+          break;
+        case 'join':
+          await this.handleJoin(msg, chatId, senderId, userName, sock, locale, false);
+          break;
+        case 'waitlist':
+          await this.handleJoin(msg, chatId, senderId, userName, sock, locale, true);
+          break;
+        case 'leave':
+          await this.handleLeave(msg, chatId, senderId, sock, locale);
+          break;
+        case 'status':
+          await this.handleStatus(msg, chatId, sock, locale);
+          break;
+        case 'cancel':
+          await this.handleCancel(msg, chatId, senderId, sock, locale);
+          break;
+        case 'lang':
+          await this.handleLang(msg, chatId, senderId, args, sock, locale);
+          break;
+        case 'help':
+          await this.safeReply(msg, chatId, sock, t(locale, 'helpMessage'));
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.error('Error in handleCommand:', err);
+    }
+  }
+
+  private async isAdmin(chatId: string, userId: string, sock: WASocket): Promise<boolean> {
+    if (!chatId.endsWith('@g.us')) return true;
+    try {
+      const metadata = await sock.groupMetadata(chatId);
+      const participant = metadata.participants.find(p => p.id === userId);
+      return !!(participant && (participant.admin === 'admin' || participant.admin === 'superadmin'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private async handleLang(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const newLang = args[0]?.toLowerCase();
+    if (!newLang || (newLang !== 'en' && newLang !== 'es')) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'langUsage'));
+    }
+    this.db.setLocale(chatId, newLang as Locale);
+    await this.safeReply(msg, chatId, sock, t(newLang as Locale, 'langChanged', newLang));
+  }
+
+  private async handleCreate(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const match = body.match(/(?:!create|!crear)\s+(?:["“]([^"“”]+)["”]|"([^"]+)"|(\S+))\s+(\d+)/i);
+    if (!match) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
+    }
+    const title = (match[1] ?? match[2] ?? match[3] ?? "").trim().substring(0, 100);
+    const slots = parseInt(match[4] ?? "0");
+    if (!title || slots <= 0) return;
+
+    const result = this.eventService.createEvent(chatId, title, slots, userId);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleJoin(msg: WAMessage, chatId: string, userId: string, userName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
+    const result = this.eventService.joinEvent(chatId, userId, userName, forceWaitlist);
+    if (!result.success && result.messageKey === 'noActiveEvent') {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
+    }
+
+    const options: { mentions?: string[] } = {};
+    if (result.mentions) options.mentions = result.mentions;
+
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
+    if (result.showStatus) {
+      await this.handleStatus(msg, chatId, sock, locale);
+    }
+  }
+
+  private async handleLeave(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+    const result = this.eventService.leaveEvent(chatId, userId);
+    if (!result.success) {
+      if (result.messageKey) await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
+      return;
+    }
+
+    const options: { mentions?: string[] } = {};
+    if (result.mentions) options.mentions = result.mentions;
+
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
+    
+    if (result.promotion) {
+      const p = result.promotion;
+      await sock.sendMessage(chatId, {
+        text: t(locale, 'slotOpened', p.userId.split('@')[0] ?? '', p.eventTitle),
+        mentions: [p.userId]
+      });
+    }
+  }
+
+  private async handleCancel(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const result = this.eventService.cancelEvent(chatId);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleStatus(msg: WAMessage, chatId: string, sock: WASocket, locale: Locale) {
+    const result = this.eventService.getStatus(chatId);
+    if (!result.success) {
+      return await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
+    }
+    const data = result.data!;
+    const joined = data.participants.filter((p: any) => p.status === 'joined' || p.status === 'pending_promotion');
+    const waitlisted = data.participants.filter((p: any) => p.status === 'waitlisted');
+
+    let text = `${t(locale, 'statusHeader', data.title)}\n`;
+    text += `${t(locale, 'statusSlots', joined.length, data.slots)}\n\n`;
+    text += `${t(locale, 'statusParticipants')}\n`;
+    joined.forEach((p: any, i: number) => {
+      text += `${i + 1}. ${p.user_name} ${p.status === 'pending_promotion' ? t(locale, 'statusPendingTag') : ''}\n`;
+    });
+    if (waitlisted.length > 0) {
+      text += `\n${t(locale, 'statusWaitlist')}\n`;
+      waitlisted.forEach((p: any, i: number) => {
+        text += `${i + 1}. ${p.user_name}\n`;
+      });
+    }
+    await this.safeReply(msg, chatId, sock, text);
+  }
+
+  private async safeReply(msg: WAMessage, chatId: string, sock: WASocket, text: string, options: { mentions?: string[] } = {}) {
+    try {
+      await sock.sendMessage(chatId, { text, mentions: options.mentions || [] }, { quoted: msg as WAMessage });
+    } catch (err: any) {
+      await sock.sendMessage(chatId, { text, mentions: options.mentions || [] });
+    }
+  }
+}
