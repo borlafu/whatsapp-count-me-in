@@ -2,7 +2,7 @@ import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import type { DatabaseManager } from './Database.js';
 import { t, type Locale } from './i18n.js';
-import { resolveCommand } from './commandAliases.js';
+import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
 
 export class CommandHandler {
@@ -28,16 +28,14 @@ export class CommandHandler {
       const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
       if (!body.startsWith('!')) return;
 
-      const [rawCommand, ...args] = body.split(' ');
-      if (!rawCommand) return;
-      const action = resolveCommand(rawCommand.toLowerCase());
+      const { action, args } = CommandParser.parse(body);
       if (!action) return;
 
       const locale = this.db.getLocale(chatId);
 
       switch (action) {
         case 'create':
-          await this.handleCreate(msg, chatId, senderId, sock, locale);
+          await this.handleCreate(msg, chatId, senderId, args, sock, locale);
           break;
         case 'join':
           await this.handleJoin(msg, chatId, senderId, userName, sock, locale, false);
@@ -58,7 +56,7 @@ export class CommandHandler {
           await this.handleResize(msg, chatId, senderId, args, sock, locale);
           break;
         case 'rename':
-          await this.handleRename(msg, chatId, senderId, sock, locale);
+          await this.handleRename(msg, chatId, senderId, args, sock, locale);
           break;
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
@@ -97,18 +95,15 @@ export class CommandHandler {
     await this.safeReply(msg, chatId, sock, t(newLang as Locale, 'langChanged', newLang));
   }
 
-  private async handleCreate(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+  private async handleCreate(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
     if (!(await this.isAdmin(chatId, userId, sock))) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
-    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    const match = body.match(/(?:!create|!crear)\s+(?:["“]([^"“”]+)["”]|"([^"]+)"|(\S+))\s+(\d+)/i);
-    if (!match) {
+    const title = (args[0] ?? "").trim().substring(0, 100);
+    const slots = parseInt(args[1] ?? "0");
+    if (!title || slots <= 0) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
     }
-    const title = (match[1] ?? match[2] ?? match[3] ?? "").trim().substring(0, 100);
-    const slots = parseInt(match[4] ?? "0");
-    if (!title || slots <= 0) return;
 
     const result = this.eventService.createEvent(chatId, title, slots, userId);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
@@ -150,14 +145,11 @@ export class CommandHandler {
     }
   }
 
-  private async handleRename(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+  private async handleRename(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
     if (!(await this.isAdmin(chatId, userId, sock))) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
-    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    const match = body.match(/(?:!rename|!renombrar)\s+(?:[\u201c\u201d"]([^\u201c\u201d"]+)[\u201c\u201d"]|"([^"]+)"|(\S+))/i);
-    if (!match) return await this.safeReply(msg, chatId, sock, t(locale, 'renameUsage'));
-    const newTitle = (match[1] ?? match[2] ?? match[3] ?? '').trim().substring(0, 100);
+    const newTitle = (args[0] ?? '').trim().substring(0, 100);
     if (!newTitle) return await this.safeReply(msg, chatId, sock, t(locale, 'renameUsage'));
     const result = this.eventService.renameEvent(chatId, newTitle);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
