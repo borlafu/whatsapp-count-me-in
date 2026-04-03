@@ -16,6 +16,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - `!create "Event Title" Slots`: Create a new event (Admins only).
 - `!cancel`: Deactivate the current active event (Admins only).
 - `!resize <slots>`: Update the maximum slots for the active event (Admins only). If the new limit is lower than the current participant count, the last-joined participants are moved to the front of the waitlist.
+- `!rename "New Title"`: Rename the active event (Admins only).
 - `!join` or `!waitlist`: Sign up for the event or join the waitlist.
 - `!leave`: Withdraw from the event or waitlist.
 - `!status`: Show the current list of participants and waitlist.

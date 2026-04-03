@@ -118,6 +118,10 @@ export class DatabaseManager {
     return this.db.prepare('UPDATE events SET slots = ? WHERE id = ?').run(slots, eventId);
   }
 
+  updateEventTitle(eventId: number | bigint, title: string) {
+    return this.db.prepare('UPDATE events SET title = ? WHERE id = ?').run(title, eventId);
+  }
+
   getNextInWaitlist(eventId: number | bigint): Participant | undefined {
     return this.db.prepare('SELECT * FROM participants WHERE event_id = ? AND status = \'waitlisted\' ORDER BY joined_at ASC LIMIT 1').get(eventId) as Participant | undefined;
   }

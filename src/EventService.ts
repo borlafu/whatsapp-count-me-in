@@ -113,6 +113,13 @@ export class EventService {
     return result;
   }
 
+  renameEvent(chatId: string, newTitle: string): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+    this.db.updateEventTitle(event.id, newTitle);
+    return { success: true, messageKey: 'eventRenamed', params: [event.title, newTitle] };
+  }
+
   resizeEvent(chatId: string, newSlots: number): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };

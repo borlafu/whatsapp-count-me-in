@@ -32,6 +32,10 @@ interface MessageTemplates {
   resizeInvalidSlots: () => string;
   eventResized: (title: string, slots: number) => string;
 
+  // Rename
+  renameUsage: () => string;
+  eventRenamed: (oldTitle: string, newTitle: string) => string;
+
   // Cancel
   noActiveEventCancel: () => string;
   eventCancelled: (title: string) => string;
@@ -74,6 +78,8 @@ const messages: Record<Locale, MessageTemplates> = {
     resizeUsage: () => 'Usage: !resize <new_slots>',
     resizeInvalidSlots: () => 'Slots must be a positive number.',
     eventResized: (title, slots) => `✅ Event "${title}" updated to ${slots} slot(s).`,
+    renameUsage: () => 'Usage: !rename "New Title"',
+    eventRenamed: (oldTitle, newTitle) => `✅ Event renamed from "${oldTitle}" to "${newTitle}".`,
     noActiveEventStatus: () => 'No active event.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Slots: ${joined}/${total}`,
@@ -89,6 +95,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!leave*  — Withdraw from the event\n` +
       `*!status*  — View event status & participants\n` +
       `*!resize <slots>*  — Update max slots (admin only)\n` +
+      `*!rename "New Title"*  — Rename the active event (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
       `*!help*  — Show this message`,
@@ -115,6 +122,8 @@ const messages: Record<Locale, MessageTemplates> = {
     resizeUsage: () => 'Uso: !resize <nuevas_plazas>',
     resizeInvalidSlots: () => 'Las plazas deben ser un número positivo.',
     eventResized: (title, slots) => `✅ El evento "${title}" ha sido actualizado a ${slots} plaza(s).`,
+    renameUsage: () => 'Uso: !renombrar "Nuevo Título"',
+    eventRenamed: (oldTitle, newTitle) => `✅ Evento renombrado de "${oldTitle}" a "${newTitle}".`,
     noActiveEventStatus: () => 'No hay ningún evento activo.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Plazas: ${joined}/${total}`,
@@ -130,6 +139,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!salir*  — Retirarse del evento\n` +
       `*!estado*  — Ver estado y participantes\n` +
       `*!resize <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
+      `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
       `*!ayuda*  — Mostrar este mensaje`,

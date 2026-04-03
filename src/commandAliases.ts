@@ -31,6 +31,8 @@ const aliases: Record<string, string> = {
   '!anular': 'cancel',
   '!resize': 'resize',
   '!redimensionar': 'resize',
+  '!rename': 'rename',
+  '!renombrar': 'rename',
   '!lang': 'lang',
   '!idioma': 'lang',
   '!help': 'help',

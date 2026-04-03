@@ -63,6 +63,20 @@ describe('EventService', () => {
     });
   });
 
+  describe('renameEvent', () => {
+    it('should return error when no active event', () => {
+      expect(service.renameEvent(chatId, 'New Name').messageKey).toBe('noActiveEvent');
+    });
+
+    it('should rename the active event', () => {
+      service.createEvent(chatId, 'Old Name', 5, adminId);
+      const result = service.renameEvent(chatId, 'New Name');
+      expect(result.success).toBe(true);
+      expect(result.params).toEqual(['Old Name', 'New Name']);
+      expect(db.getActiveEvent(chatId)?.title).toBe('New Name');
+    });
+  });
+
   describe('resizeEvent', () => {
     it('should return error when no active event', () => {
       expect(service.resizeEvent(chatId, 5).messageKey).toBe('noActiveEvent');

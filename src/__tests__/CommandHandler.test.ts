@@ -113,6 +113,38 @@ describe('CommandHandler', () => {
     });
   });
 
+  describe('!rename', () => {
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      service.createEvent(chatId, 'Old Name', 5, adminId);
+      await handler.handleCommand(createMockMsg('!rename "New Name"'), mockSock);
+      expect(db.getActiveEvent(chatId)?.title).toBe('Old Name');
+    });
+
+    it('should reply with usage when no title given', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Old Name', 5, adminId);
+      await handler.handleCommand(createMockMsg('!rename', true, adminId), mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('!rename')
+      }), expect.anything());
+    });
+
+    it('should allow admin to rename the event', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Old Name', 5, adminId);
+      await handler.handleCommand(createMockMsg('!rename "New Name"', true, adminId), mockSock);
+      expect(db.getActiveEvent(chatId)?.title).toBe('New Name');
+    });
+
+    it('should support curly quotes', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Old Name', 5, adminId);
+      await handler.handleCommand(createMockMsg('!rename \u201cFiesta Grande\u201d', true, adminId), mockSock);
+      expect(db.getActiveEvent(chatId)?.title).toBe('Fiesta Grande');
+    });
+  });
+
   describe('!resize', () => {
     it('should deny non-admin', async () => {
       mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
