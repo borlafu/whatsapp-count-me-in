@@ -57,6 +57,9 @@ export class CommandHandler {
         case 'resize':
           await this.handleResize(msg, chatId, senderId, args, sock, locale);
           break;
+        case 'rename':
+          await this.handleRename(msg, chatId, senderId, sock, locale);
+          break;
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
           break;
@@ -145,6 +148,19 @@ export class CommandHandler {
         mentions: [p.userId]
       });
     }
+  }
+
+  private async handleRename(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const match = body.match(/(?:!rename|!renombrar)\s+(?:[\u201c\u201d"]([^\u201c\u201d"]+)[\u201c\u201d"]|"([^"]+)"|(\S+))/i);
+    if (!match) return await this.safeReply(msg, chatId, sock, t(locale, 'renameUsage'));
+    const newTitle = (match[1] ?? match[2] ?? match[3] ?? '').trim().substring(0, 100);
+    if (!newTitle) return await this.safeReply(msg, chatId, sock, t(locale, 'renameUsage'));
+    const result = this.eventService.renameEvent(chatId, newTitle);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 
   private async handleResize(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
