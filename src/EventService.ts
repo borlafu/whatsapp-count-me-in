@@ -113,6 +113,25 @@ export class EventService {
     return result;
   }
 
+  resizeEvent(chatId: string, newSlots: number): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+    if (newSlots <= 0) return { success: false, messageKey: 'resizeInvalidSlots' };
+
+    const participants = this.db.getParticipants(event.id);
+    const joined = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion');
+
+    if (newSlots < joined.length) {
+      const toMove = joined.slice(newSlots).reverse();
+      for (const p of toMove) {
+        this.db.updateParticipantStatus(event.id, p.user_id, 'waitlisted');
+      }
+    }
+
+    this.db.updateEventSlots(event.id, newSlots);
+    return { success: true, messageKey: 'eventResized', params: [event.title, newSlots], showStatus: true };
+  }
+
   cancelEvent(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEventCancel' };

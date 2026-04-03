@@ -62,4 +62,37 @@ describe('EventService', () => {
       expect((result as any).promotion.userId).toBe(user2);
     });
   });
+
+  describe('resizeEvent', () => {
+    it('should return error when no active event', () => {
+      expect(service.resizeEvent(chatId, 5).messageKey).toBe('noActiveEvent');
+    });
+
+    it('should return error for invalid slot count', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      expect(service.resizeEvent(chatId, 0).messageKey).toBe('resizeInvalidSlots');
+    });
+
+    it('should update slots', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      service.resizeEvent(chatId, 5);
+      expect(db.getActiveEvent(chatId)?.slots).toBe(5);
+    });
+
+    it('should demote last-joined participants when slots reduced below count', () => {
+      service.createEvent(chatId, 'Test Event', 3, adminId);
+      const user3 = 'user3@s.whatsapp.net';
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+      service.joinEvent(chatId, user3, 'User Three');
+
+      service.resizeEvent(chatId, 1);
+
+      const event = db.getActiveEvent(chatId)!;
+      const all = db.getParticipants(event.id);
+      expect(all.filter(p => p.status === 'joined').length).toBe(1);
+      expect(all.filter(p => p.status === 'joined')[0].user_id).toBe(user1);
+      expect(all.filter(p => p.status === 'waitlisted').length).toBe(2);
+    });
+  });
 });

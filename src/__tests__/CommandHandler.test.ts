@@ -112,4 +112,41 @@ describe('CommandHandler', () => {
       expect(mockSock.sendMessage).toHaveBeenCalled();
     });
   });
+
+  describe('!resize', () => {
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      await handler.handleCommand(createMockMsg('!resize 3'), mockSock);
+      expect(db.getActiveEvent(chatId)?.slots).toBe(5);
+    });
+
+    it('should reply with usage when no number given', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      await handler.handleCommand(createMockMsg('!resize', true, adminId), mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('!resize')
+      }), expect.anything());
+    });
+
+    it('should allow admin to update slots', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      await handler.handleCommand(createMockMsg('!resize 10', true, adminId), mockSock);
+      expect(db.getActiveEvent(chatId)?.slots).toBe(10);
+    });
+
+    it('should demote excess participants when slots reduced', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 3, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'U1');
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'U2');
+      service.joinEvent(chatId, 'u3@s.whatsapp.net', 'U3');
+      await handler.handleCommand(createMockMsg('!resize 1', true, adminId), mockSock);
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).filter(p => p.status === 'joined').length).toBe(1);
+      expect(db.getParticipants(event.id).filter(p => p.status === 'waitlisted').length).toBe(2);
+    });
+  });
 });

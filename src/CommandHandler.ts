@@ -54,6 +54,9 @@ export class CommandHandler {
         case 'cancel':
           await this.handleCancel(msg, chatId, senderId, sock, locale);
           break;
+        case 'resize':
+          await this.handleResize(msg, chatId, senderId, args, sock, locale);
+          break;
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
           break;
@@ -142,6 +145,19 @@ export class CommandHandler {
         mentions: [p.userId]
       });
     }
+  }
+
+  private async handleResize(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const newSlots = parseInt(args[0] ?? '');
+    if (!newSlots || newSlots <= 0) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'resizeUsage'));
+    }
+    const result = this.eventService.resizeEvent(chatId, newSlots);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+    if (result.showStatus) await this.handleStatus(msg, chatId, sock, locale);
   }
 
   private async handleCancel(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {

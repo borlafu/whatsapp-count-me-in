@@ -27,6 +27,11 @@ interface MessageTemplates {
   notSignedUp: () => string;
   withdrawn: (mention: string, title: string) => string;
 
+  // Resize
+  resizeUsage: () => string;
+  resizeInvalidSlots: () => string;
+  eventResized: (title: string, slots: number) => string;
+
   // Cancel
   noActiveEventCancel: () => string;
   eventCancelled: (title: string) => string;
@@ -66,6 +71,9 @@ const messages: Record<Locale, MessageTemplates> = {
     withdrawn: (mention, title) => `❌ @${mention}, you have withdrawn from "${title}".`,
     noActiveEventCancel: () => 'No active event to cancel.',
     eventCancelled: (title) => `🛑 Event "${title}" has been cancelled.`,
+    resizeUsage: () => 'Usage: !resize <new_slots>',
+    resizeInvalidSlots: () => 'Slots must be a positive number.',
+    eventResized: (title, slots) => `✅ Event "${title}" updated to ${slots} slot(s).`,
     noActiveEventStatus: () => 'No active event.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Slots: ${joined}/${total}`,
@@ -80,6 +88,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!waitlist*  — Join the waitlist directly\n` +
       `*!leave*  — Withdraw from the event\n` +
       `*!status*  — View event status & participants\n` +
+      `*!resize <slots>*  — Update max slots (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
       `*!help*  — Show this message`,
@@ -103,6 +112,9 @@ const messages: Record<Locale, MessageTemplates> = {
     withdrawn: (mention, title) => `❌ @${mention}, te has retirado de "${title}".`,
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
     eventCancelled: (title) => `🛑 El evento "${title}" ha sido cancelado.`,
+    resizeUsage: () => 'Uso: !resize <nuevas_plazas>',
+    resizeInvalidSlots: () => 'Las plazas deben ser un número positivo.',
+    eventResized: (title, slots) => `✅ El evento "${title}" ha sido actualizado a ${slots} plaza(s).`,
     noActiveEventStatus: () => 'No hay ningún evento activo.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Plazas: ${joined}/${total}`,
@@ -117,6 +129,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!espera*  — Unirse a la lista de espera\n` +
       `*!salir*  — Retirarse del evento\n` +
       `*!estado*  — Ver estado y participantes\n` +
+      `*!resize <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
       `*!ayuda*  — Mostrar este mensaje`,
