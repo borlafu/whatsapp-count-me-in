@@ -37,6 +37,8 @@ const aliases: Record<string, string> = {
   '!nombre': 'rename',
   '!lang': 'lang',
   '!idioma': 'lang',
+  '!invite': 'invite',
+  '!invitar': 'invite',
   '!help': 'help',
   '!ayuda': 'help',
 };

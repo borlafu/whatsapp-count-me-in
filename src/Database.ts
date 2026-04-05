@@ -19,6 +19,8 @@ export interface Participant {
   user_id: string;
   user_name: string;
   status: 'joined' | 'waitlisted' | 'withdrawn' | 'pending_promotion';
+  invited_by?: string;
+  invited_by_name?: string;
   joined_at: string;
 }
 
@@ -50,6 +52,8 @@ export class DatabaseManager {
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
         status TEXT NOT NULL,
+        invited_by TEXT,
+        invited_by_name TEXT,
         joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (event_id) REFERENCES events(id)
       );
@@ -59,6 +63,19 @@ export class DatabaseManager {
         locale TEXT NOT NULL DEFAULT 'en'
       );
     `);
+
+    // Migration: Add guest-related columns to participants if they don't exist
+    const columns = this.db.prepare('PRAGMA table_info(participants)').all() as any[];
+    const columnNames = columns.map(c => c.name);
+
+    if (!columnNames.includes('invited_by')) {
+      console.log('Migrating database: Adding invited_by column to participants table...');
+      this.db.exec('ALTER TABLE participants ADD COLUMN invited_by TEXT');
+    }
+    if (!columnNames.includes('invited_by_name')) {
+      console.log('Migrating database: Adding invited_by_name column to participants table...');
+      this.db.exec('ALTER TABLE participants ADD COLUMN invited_by_name TEXT');
+    }
   }
 
   getLocale(chatId: string): Locale {
@@ -83,12 +100,12 @@ export class DatabaseManager {
     return this.db.prepare('SELECT * FROM events WHERE chat_id = ? AND status = \'active\' ORDER BY created_at DESC LIMIT 1').get(chatId) as WhatsAppEvent | undefined;
   }
 
-  addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status']) {
+  addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status'], invitedBy?: string, invitedByName?: string) {
     const stmt = this.db.prepare(`
-      INSERT INTO participants (event_id, user_id, user_name, status)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO participants (event_id, user_id, user_name, status, invited_by, invited_by_name)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    return stmt.run(eventId, userId, userName, status);
+    return stmt.run(eventId, userId, userName, status, invitedBy, invitedByName);
   }
 
   getParticipants(eventId: number | bigint): Participant[] {
