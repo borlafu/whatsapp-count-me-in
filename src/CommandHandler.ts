@@ -44,7 +44,7 @@ export class CommandHandler {
           await this.handleJoin(msg, chatId, senderId, userName, sock, locale, true);
           break;
         case 'leave':
-          await this.handleLeave(msg, chatId, senderId, sock, locale);
+          await this.handleLeave(msg, chatId, senderId, args, sock, locale);
           break;
         case 'status':
           await this.handleStatus(msg, chatId, sock, locale);
@@ -57,6 +57,9 @@ export class CommandHandler {
           break;
         case 'rename':
           await this.handleRename(msg, chatId, senderId, args, sock, locale);
+          break;
+        case 'invite':
+          await this.handleInvite(msg, chatId, senderId, userName, args, sock, locale);
           break;
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
@@ -124,8 +127,31 @@ export class CommandHandler {
     }
   }
 
-  private async handleLeave(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
-    const result = this.eventService.leaveEvent(chatId, userId);
+  private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], sock: WASocket, locale: Locale) {
+    const guestName = (args[0] ?? '').trim().substring(0, 50);
+    if (!guestName) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'inviteUsage'));
+    }
+ 
+    const result = this.eventService.inviteGuest(chatId, userId, userName, guestName);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+ 
+    if (result.showStatus) {
+      await this.handleStatus(msg, chatId, sock, locale);
+    }
+  }
+
+  private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    const index = parseInt(args[0] ?? '');
+    let result;
+
+    if (!isNaN(index) && index > 0) {
+      const isAdmin = await this.isAdmin(chatId, userId, sock);
+      result = this.eventService.leaveByIndex(chatId, userId, isAdmin, index);
+    } else {
+      result = this.eventService.leaveEvent(chatId, userId);
+    }
+
     if (!result.success) {
       if (result.messageKey) await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
       return;
@@ -142,6 +168,10 @@ export class CommandHandler {
         text: t(locale, 'slotOpened', p.userId.split('@')[0] ?? '', p.eventTitle),
         mentions: [p.userId]
       });
+    }
+
+    if (result.showStatus) {
+      await this.handleStatus(msg, chatId, sock, locale);
     }
   }
 
@@ -189,12 +219,14 @@ export class CommandHandler {
     text += `${t(locale, 'statusSlots', joined.length, data.slots)}\n\n`;
     text += `${t(locale, 'statusParticipants')}\n`;
     joined.forEach((p: any, i: number) => {
-      text += `${i + 1}. ${p.user_name} ${p.status === 'pending_promotion' ? t(locale, 'statusPendingTag') : ''}\n`;
+      const displayName = p.invited_by ? t(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin') : p.user_name;
+      text += `${i + 1}. ${displayName} ${p.status === 'pending_promotion' ? t(locale, 'statusPendingTag') : ''}\n`;
     });
     if (waitlisted.length > 0) {
       text += `\n${t(locale, 'statusWaitlist')}\n`;
       waitlisted.forEach((p: any, i: number) => {
-        text += `${i + 1}. ${p.user_name}\n`;
+        const displayName = p.invited_by ? t(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin') : p.user_name;
+        text += `${i + 1}. ${displayName}\n`;
       });
     }
     await this.safeReply(msg, chatId, sock, text);

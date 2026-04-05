@@ -81,6 +81,35 @@ export class EventService {
     }
   }
 
+  inviteGuest(chatId: string, inviterId: string, inviterName: string, guestName: string): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+
+    const guestId = `guest:${Date.now()}:${inviterId.split('@')[0]}`;
+    const participants = this.db.getParticipants(event.id);
+    const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
+
+    if (joinedCount < event.slots) {
+      this.db.addParticipant(event.id, guestId, guestName, 'joined', inviterId, inviterName);
+      return {
+        success: true,
+        messageKey: 'guestJoined',
+        params: [guestName, inviterName, event.title],
+        showStatus: true
+      };
+    } else if (event.waitlist_enabled) {
+      this.db.addParticipant(event.id, guestId, guestName, 'waitlisted', inviterId, inviterName);
+      return {
+        success: true,
+        messageKey: 'guestJoinedWaitlist',
+        params: [guestName, inviterName, event.title],
+        showStatus: true
+      };
+    } else {
+      return { success: false, messageKey: 'eventFullNoWaitlist' };
+    }
+  }
+
   leaveEvent(chatId: string, userId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
@@ -88,21 +117,60 @@ export class EventService {
     const participant = this.db.getParticipant(event.id, userId);
     if (!participant) return { success: false, messageKey: 'notSignedUp' };
 
+    return this.performWithdrawal(event, participant);
+  }
+
+  leaveByIndex(chatId: string, requesterId: string, isAdmin: boolean, index: number): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+
+    const participants = this.db.getParticipants(event.id);
+    const joined = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion');
+    const waitlisted = participants.filter(p => p.status === 'waitlisted');
+    const allDisplay = [...joined, ...waitlisted];
+
+    const participant = allDisplay[index - 1];
+    if (!participant) return { success: false, messageKey: 'leaveIndexInvalid' };
+
+    // Check permissions
+    const isSelf = participant.user_id === requesterId;
+    const isMyGuest = participant.invited_by === requesterId;
+
+    if (!isAdmin && !isSelf && !isMyGuest) {
+      return { success: false, messageKey: 'notAuthorizedToLeave' };
+    }
+
+    return this.performWithdrawal(event, participant, requesterId);
+  }
+
+  private performWithdrawal(event: any, participant: Participant, requesterId?: string): ServiceResult {
     const oldStatus = participant.status;
-    this.db.withdrawParticipant(event.id, userId);
+    this.db.withdrawParticipant(event.id, participant.user_id);
+
+    let messageKey = 'withdrawn';
+    let params: any[] = [participant.user_id.split('@')[0], event.title];
+    let mentions: string[] = [participant.user_id];
+
+    // If it's a guest being removed by someone else
+    if (participant.invited_by && requesterId && participant.user_id !== requesterId) {
+      messageKey = 'guestWithdrawn';
+      params = [participant.user_name, event.title, requesterId.split('@')[0]];
+      mentions = [requesterId];
+    }
 
     const result: ServiceResult = {
       success: true,
-      messageKey: 'withdrawn',
-      params: [userId.split('@')[0], event.title],
-      mentions: [userId]
+      messageKey,
+      params,
+      mentions,
+      showStatus: true
     };
 
     if (oldStatus === 'joined' || oldStatus === 'pending_promotion') {
       const next = this.db.getNextInWaitlist(event.id);
       if (next) {
         this.db.updateParticipantStatus(event.id, next.user_id, 'pending_promotion');
-        (result as ServiceResult).promotion = {
+        result.promotion = {
           userId: next.user_id,
           userName: next.user_name,
           eventTitle: event.title

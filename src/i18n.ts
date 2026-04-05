@@ -26,6 +26,9 @@ interface MessageTemplates {
   // Leave
   notSignedUp: () => string;
   withdrawn: (mention: string, title: string) => string;
+  guestWithdrawn: (guestName: string, title: string, inviterName: string) => string;
+  notAuthorizedToLeave: () => string;
+  leaveIndexInvalid: () => string;
 
   // Resize
   resizeUsage: () => string;
@@ -51,6 +54,12 @@ interface MessageTemplates {
   // Promotion
   slotOpened: (mention: string, title: string) => string;
 
+  // Invite
+  inviteUsage: () => string;
+  guestJoined: (guestName: string, inviterName: string, title: string) => string;
+  guestJoinedWaitlist: (guestName: string, inviterName: string, title: string) => string;
+  statusGuest: (guestName: string, inviterName: string) => string;
+
   // Help
   helpMessage: () => string;
 }
@@ -73,6 +82,9 @@ const messages: Record<Locale, MessageTemplates> = {
     eventFullNoWaitlist: () => 'Sorry, the event is full and waitlist is disabled.',
     notSignedUp: () => 'You are not signed up for this event.',
     withdrawn: (mention, title) => `❌ @${mention}, you have withdrawn from "${title}".`,
+    guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (inviter: ${inviterName}) has been withdrawn from "${title}".`,
+    notAuthorizedToLeave: () => 'You can only remove yourself or your own guests.',
+    leaveIndexInvalid: () => 'Invalid number. Please check the current !status.',
     noActiveEventCancel: () => 'No active event to cancel.',
     eventCancelled: (title) => `🛑 Event "${title}" has been cancelled.`,
     resizeUsage: () => 'Usage: !resize <new_slots>',
@@ -87,13 +99,18 @@ const messages: Record<Locale, MessageTemplates> = {
     statusPendingTag: () => '(Pending)',
     statusWaitlist: () => '⏳ *Waitlist:*',
     slotOpened: (mention, title) => `🔊 Attention @${mention}! A slot opened up for "${title}".\nReply with !join to confirm or !leave to decline.`,
+    inviteUsage: () => 'Usage: !invite "Guest Name"',
+    guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invited by ${inviterName}) has joined "${title}".`,
+    guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invited by ${inviterName}) has been added to the waitlist for "${title}".`,
+    statusGuest: (guestName, inviterName) => `${guestName} (${inviterName}'s guest)`,
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
       `*!create "Title" <slots>*  — Create an event (admin only)\n` +
       `*!join*  — Sign up for the active event\n` +
       `*!waitlist*  — Join the waitlist directly\n` +
-      `*!leave*  — Withdraw from the event\n` +
+      `*!leave [number]*  — Withdraw yourself or your guest (by index)\n` +
       `*!status*  — View event status & participants\n` +
+      `*!invite "Name"*  — Invite a guest by name\n` +
       `*!resize <slots>*  — Update max slots (admin only)\n` +
       `*!rename "New Title"*  — Rename the active event (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
@@ -117,6 +134,9 @@ const messages: Record<Locale, MessageTemplates> = {
     eventFullNoWaitlist: () => 'Lo sentimos, el evento está lleno y la lista de espera está desactivada.',
     notSignedUp: () => 'No estás apuntado/a a este evento.',
     withdrawn: (mention, title) => `❌ @${mention}, te has retirado de "${title}".`,
+    guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (invitante: ${inviterName}) ha sido retirado/a de "${title}".`,
+    notAuthorizedToLeave: () => 'Solo puedes retirarte a ti mismo o a tus propios invitados.',
+    leaveIndexInvalid: () => 'Número inválido. Por favor revisa el !estado actual.',
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
     eventCancelled: (title) => `🛑 El evento "${title}" ha sido cancelado.`,
     resizeUsage: () => 'Uso: !resize <nuevas_plazas>',
@@ -131,13 +151,18 @@ const messages: Record<Locale, MessageTemplates> = {
     statusPendingTag: () => '(Pendiente)',
     statusWaitlist: () => '⏳ *Lista de espera:*',
     slotOpened: (mention, title) => `🔊 ¡Atención @${mention}! Se ha liberado una plaza en "${title}".\nResponde con !unirse para confirmar o !salir para rechazar.`,
+    inviteUsage: () => 'Uso: !invitar "Nombre del Invitado"',
+    guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invitado/a por ${inviterName}) se ha unido a "${title}".`,
+    guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invitado/a por ${inviterName}) ha sido añadido/a a la lista de espera de "${title}".`,
+    statusGuest: (guestName, inviterName) => `${guestName} (invitado/a de ${inviterName})`,
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
       `*!crear "Título" <plazas>*  — Crear un evento (solo admins)\n` +
       `*!unirse*  — Apuntarse al evento activo\n` +
       `*!espera*  — Unirse a la lista de espera\n` +
-      `*!salir*  — Retirarse del evento\n` +
+      `*!salir [número]*  — Retirarte tú o a tus invitados (por índice)\n` +
       `*!estado*  — Ver estado y participantes\n` +
+      `*!invitar "Nombre"*  — Invitar a un externo por nombre\n` +
       `*!resize <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
