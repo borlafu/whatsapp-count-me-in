@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -20,3 +24,23 @@ jobs:
             npm install
             npm run build
             pm2 reload ecosystem.config.cjs --update-env
+
+      - name: Comment on Merged PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --state merged \
+            --limit 1 \
+            --search "${{ github.sha }}" \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment $PR_NUMBER --body "🚀 **Automatic Deployment Successful!** 
+
+            The changes from this PR have been successfully deployed to the Oracle VM and the PM2 process has been reloaded."
+          else
+            echo "No merged PR found for this commit."
+          fi
