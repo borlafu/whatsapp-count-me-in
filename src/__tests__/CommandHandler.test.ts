@@ -181,4 +181,111 @@ describe('CommandHandler', () => {
       expect(db.getParticipants(event.id).filter(p => p.status === 'waitlisted').length).toBe(2);
     });
   });
+
+  describe('!invite', () => {
+    it('should allow a user to invite a guest', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      const msg = createMockMsg('!invite "Guest Name"');
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      const guest = participants.find(p => p.user_name === 'Guest Name')!;
+      
+      expect(guest).toBeDefined();
+      expect(guest.user_id).toContain('guest:');
+      expect(guest.invited_by).toBe(userId);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Guest Name')
+      }), expect.anything());
+    });
+
+    it('should format guest names correctly in status', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      await handler.handleCommand(createMockMsg('!invite "Juan"'), mockSock);
+      
+      // Clear mock to check status call
+      mockSock.sendMessage.mockClear();
+      await handler.handleCommand(createMockMsg('!status'), mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining("Juan (Test User's guest)")
+      }), expect.anything());
+    });
+
+    it('should add guest to waitlist if full', async () => {
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, adminId, 'Admin');
+      
+      const msg = createMockMsg('!invite "Guest"');
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const guest = db.getParticipants(event.id).find(p => p.user_name === 'Guest')!;
+      expect(guest.status).toBe('waitlisted');
+    });
+  });
+
+  describe('!leave with index', () => {
+    it('should allow a user to remove themselves by index', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+      
+      const msg = createMockMsg('!leave 1');
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).length).toBe(0);
+    });
+
+    it('should allow a user to remove their own guest', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+      service.inviteGuest(chatId, userId, 'Test User', 'Guest');
+      
+      // Status will be: 1. Test User, 2. Guest
+      const msg = createMockMsg('!leave 2');
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      expect(participants.length).toBe(1);
+      expect(participants[0]?.user_name).toBe('Test User');
+    });
+
+    it('should allow admin to remove anyone', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'User');
+      
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      const msg = createMockMsg('!leave 1', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).length).toBe(0);
+    });
+
+    it('should deny non-admin from removing someone else', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, adminId, 'Admin');
+      
+      const msg = createMockMsg('!leave 1'); // User trying to remove Admin at index 1
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).length).toBe(1);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('only remove yourself or your own guests')
+      }), expect.anything());
+    });
+
+    it('should handle invalid index', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      const msg = createMockMsg('!leave 99');
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Invalid number')
+      }), expect.anything());
+    });
+  });
 });
