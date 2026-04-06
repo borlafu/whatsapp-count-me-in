@@ -7,18 +7,21 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 
 ## Features
 - **Group Admin ONLY**: Only group admins can create new events.
+- **Guest invitations**: Invite external guests who are not in the WhatsApp group.
 - **Waitlist Support**: Automatically manage waitlists when an event is full.
 - **Automatic Promotion**: When someone leaves, the first person on the waitlist is notified to confirm their spot.
+- **Indexed Removal**: Remove participants or guests by their number in the status list.
 - **Active State**: Only one active event can be managed per group at a time.
 - **Low Profile Engine**: Specifically designed to run in environments with 1GB RAM or less, consuming < 100MB of RAM.
 
 ## Commands
-- `!create "Event Title" Slots`: Create a new event (Admins only).
+- `!create "Event Title" Slots`: Create a new event (Admins only). Supports both standard (`"`) and smart (`“ ”`) quotes.
 - `!cancel`: Deactivate the current active event (Admins only).
 - `!resize <slots>`: Update the maximum slots for the active event (Admins only). If the new limit is lower than the current participant count, the last-joined participants are moved to the front of the waitlist.
 - `!rename "New Title"`: Rename the active event (Admins only).
 - `!join` or `!waitlist`: Sign up for the event or join the waitlist.
-- `!leave`: Withdraw from the event or waitlist.
+- `!invite "Guest Name"`: Invite an external guest (non-group member) to the event.
+- `!leave [index]`: Withdraw from the event. Use the optional `index` (the number shown in `!status`) to remove a specific guest you invited or to remove yourself. Admins can remove anyone by index.
 - `!status`: Show the current list of participants and waitlist.
 - `!lang en|es`: Change bot language (Admins only).
 - `!help`: Show help message.
