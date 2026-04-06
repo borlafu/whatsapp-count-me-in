@@ -163,7 +163,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!salir [número]*  — Retirarte tú o a tus invitados (por índice)\n` +
       `*!estado*  — Ver estado y participantes\n` +
       `*!invitar "Nombre"*  — Invitar a un externo por nombre\n` +
-      `*!resize <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
+      `*!plazas <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
