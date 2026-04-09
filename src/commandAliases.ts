@@ -41,6 +41,10 @@ const aliases: Record<string, string> = {
   '!invitar': 'invite',
   '!help': 'help',
   '!ayuda': 'help',
+  '!groups': 'groups',
+  '!grupos': 'groups',
+  '!draw': 'groups',
+  '!sorteo': 'groups',
 };
 
 export function resolveCommand(raw: string): string | undefined {
