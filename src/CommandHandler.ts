@@ -118,12 +118,10 @@ export class CommandHandler {
       return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
     }
 
-    const options: { mentions?: string[] } = {};
-    if (result.mentions) options.mentions = result.mentions;
-
-    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
     if (result.showStatus) {
       await this.handleStatus(msg, chatId, sock, locale);
+    } else {
+      await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
     }
   }
 
@@ -134,10 +132,11 @@ export class CommandHandler {
     }
  
     const result = this.eventService.inviteGuest(chatId, userId, userName, guestName);
-    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
- 
+
     if (result.showStatus) {
       await this.handleStatus(msg, chatId, sock, locale);
+    } else {
+      await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
     }
   }
 
@@ -160,8 +159,6 @@ export class CommandHandler {
     const options: { mentions?: string[] } = {};
     if (result.mentions) options.mentions = result.mentions;
 
-    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
-    
     if (result.promotion) {
       const p = result.promotion;
       await sock.sendMessage(chatId, {
@@ -172,6 +169,8 @@ export class CommandHandler {
 
     if (result.showStatus) {
       await this.handleStatus(msg, chatId, sock, locale);
+    } else {
+      await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
     }
   }
 

@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WhatsApp Count Me In — Lightweight Event Sign-Up Bot for WhatsApp Groups</title>
-  <meta name="description" content="A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in groups. Open source, runs on less than 100 MB RAM, deploys in 60 seconds.">
-  <meta name="keywords" content="WhatsApp bot, event management, sign-up bot, waitlist, open source, lightweight">
+  <title>WhatsApp Count Me In — Bot ligero para registro de eventos en grupos de WhatsApp</title>
+  <meta name="description" content="Un bot de WhatsApp superligero para gestionar registros de eventos y listas de espera en grupos. Código abierto, funciona con menos de 100 MB de RAM, se despliega en 60 segundos.">
+  <meta name="keywords" content="WhatsApp bot, gestión de eventos, bot de registro, lista de espera, código abierto, ligero">
   <meta name="author" content="borlafu">
   <meta property="og:title" content="WhatsApp Count Me In">
-  <meta property="og:description" content="A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in groups.">
+  <meta property="og:description" content="Un bot de WhatsApp superligero para gestionar registros de eventos y listas de espera en grupos.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://borlafu.github.io/whatsapp-count-me-in/">
-  <link rel="canonical" href="https://borlafu.github.io/whatsapp-count-me-in/">
+  <meta property="og:url" content="https://borlafu.github.io/whatsapp-count-me-in/es/">
+  <link rel="canonical" href="https://borlafu.github.io/whatsapp-count-me-in/es/">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
@@ -681,8 +681,8 @@
 
   <!-- ===== Header ===== -->
   <header>
-    <nav class="container" aria-label="Main navigation">
-      <a href="#" class="nav-brand" aria-label="WhatsApp Count Me In — Home">
+    <nav class="container" aria-label="Navegación principal">
+      <a href="#" class="nav-brand" aria-label="WhatsApp Count Me In — Inicio">
         <!-- Inline SVG Logo: geometric "count" / tally mark motif -->
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
           <rect x="2" y="4" width="3" height="20" rx="1.5" fill="currentColor"/>
@@ -695,16 +695,16 @@
       </a>
 
       <div class="nav-actions">
-        <a href="#features" class="nav-link hide-mobile">Features</a>
-        <a href="#quickstart" class="nav-link hide-mobile">Get Started</a>
+        <a href="#features" class="nav-link hide-mobile">Funciones</a>
+        <a href="#quickstart" class="nav-link hide-mobile">Empezar</a>
 
         <div class="lang-switcher hide-mobile">
-          <span class="nav-link active">En</span>
+          <a href="../index.html" class="nav-link">En</a>
           <span class="nav-link-divider">/</span>
-          <a href="es/index.html" class="nav-link">Es</a>
+          <span class="nav-link active">Es</span>
         </div>
 
-        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle color theme">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Cambiar tema de color">
           <!-- Sun icon (shown in dark mode → click to go light) -->
           <svg class="icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <circle cx="10" cy="10" r="4"/>
@@ -716,7 +716,7 @@
           </svg>
         </button>
 
-        <a href="https://github.com/borlafu/whatsapp-count-me-in" target="_blank" rel="noopener noreferrer" class="btn-github-nav hide-mobile" aria-label="View on GitHub">
+        <a href="https://github.com/borlafu/whatsapp-count-me-in" target="_blank" rel="noopener noreferrer" class="btn-github-nav hide-mobile" aria-label="Ver en GitHub">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
           </svg>
@@ -731,12 +731,12 @@
     <!-- ===== Hero Section ===== -->
     <section class="hero" id="hero">
       <div class="container">
-        <div class="hero-badge">Open Source</div>
+        <div class="hero-badge">Código Abierto</div>
 
-        <h1>Event sign-ups for WhatsApp groups, without the chaos</h1>
+        <h1>Registro de eventos para grupos de WhatsApp, sin el caos</h1>
 
         <p class="hero-tagline">
-          A bot that handles RSVPs, waitlists, and guest invites in your WhatsApp group — running on less than 100 MB of RAM.
+          Un bot que gestiona confirmaciones, listas de espera e invitaciones de invitados en tu grupo de WhatsApp — funcionando con menos de 100 MB de RAM.
         </p>
 
         <div class="hero-actions">
@@ -744,10 +744,10 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
             </svg>
-            View on GitHub
+            Ver en GitHub
           </a>
           <a href="#quickstart" class="btn-secondary" id="cta-quickstart">
-            Get started
+            Empezar
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M6 12l4-4-4-4"/>
             </svg>
@@ -757,19 +757,19 @@
         <div class="hero-meta">
           <div class="hero-stat">
             <span class="hero-stat-value">&lt; 100 MB</span>
-            <span class="hero-stat-label">RAM Usage</span>
+            <span class="hero-stat-label">Uso de RAM</span>
           </div>
           <div class="hero-stat">
             <span class="hero-stat-value">TypeScript</span>
-            <span class="hero-stat-label">Language</span>
+            <span class="hero-stat-label">Lenguaje</span>
           </div>
           <div class="hero-stat">
             <span class="hero-stat-value">SQLite</span>
-            <span class="hero-stat-label">Storage</span>
+            <span class="hero-stat-label">Almacenamiento</span>
           </div>
           <div class="hero-stat">
             <span class="hero-stat-value">MIT</span>
-            <span class="hero-stat-label">License</span>
+            <span class="hero-stat-label">Licencia</span>
           </div>
         </div>
       </div>
@@ -780,8 +780,8 @@
     <!-- ===== Features Section ===== -->
     <section class="features" id="features">
       <div class="container">
-        <p class="section-label fade-in">How it works</p>
-        <h2 class="section-heading fade-in">Everything your group needs to coordinate events. Nothing it doesn't.</h2>
+        <p class="section-label fade-in">Cómo funciona</p>
+        <h2 class="section-heading fade-in">Todo lo que tu grupo necesita para coordinar eventos. Nada que no necesite.</h2>
 
         <div class="features-grid">
           <!-- Large callout card -->
@@ -794,10 +794,10 @@
                 <path d="M16 3.13a4 4 0 010 7.75"/>
               </svg>
             </div>
-            <h3 class="feature-title">Slot management with automatic waitlist promotion</h3>
+            <h3 class="feature-title">Gestión de cupos con promoción automática de lista de espera</h3>
             <p class="feature-desc">
-              Admins create an event with a fixed number of slots using <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!create "Friday Soccer" 12</code>. Members join with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!join</code> — once the event fills up, everyone else is added to the waitlist. When someone drops out, the first person on the waitlist is automatically promoted and notified.
-              No manual shuffling, no missed messages.
+              Los administradores crean un evento con un número fijo de cupos usando <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!create "Fútbol Viernes" 12</code>. Los miembros se unen con <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!join</code> — una vez que el evento se llena, todos los demás se agregan a la lista de espera. Cuando alguien se retira, la primera persona en la lista de espera es promovida y notificada automáticamente.
+              Sin barajamiento manual, sin mensajes perdidos.
             </p>
           </article>
 
@@ -811,9 +811,9 @@
                 <line x1="22" y1="11" x2="16" y2="11"/>
               </svg>
             </div>
-            <h3 class="feature-title">Guest invitations</h3>
+            <h3 class="feature-title">Invitaciones de invitados</h3>
             <p class="feature-desc">
-              Need to bring someone who isn't in the group? Any member can add a named guest with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!invite "Alex"</code>. Guests count toward the slot limit and appear in the status list tied to their inviter.
+              ¿Necesitas traer a alguien que no está en el grupo? Cualquier miembro puede agregar un invitado con nombre con <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!invite "Alex"</code>. Los invitados cuentan para el límite de cupos y aparecen en la lista de estado vinculados a quien los invitó.
             </p>
           </article>
 
@@ -825,9 +825,9 @@
                 <path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
             </div>
-            <h3 class="feature-title">Admin-gated controls</h3>
+            <h3 class="feature-title">Controles de administrador</h3>
             <p class="feature-desc">
-              Only group admins can create, cancel, resize, or rename events, and remove anyone by index. Members can join, leave, invite guests, and remove their own guests.
+              Solo los administradores del grupo pueden crear, cancelar, redimensionar o renombrar eventos, y eliminar a cualquier persona por índice. Los miembros pueden unirse, salir, invitar invitados y eliminar a sus propios invitados.
             </p>
           </article>
         </div>
@@ -843,9 +843,9 @@
                 <line x1="14" y1="11" x2="14" y2="17"/>
               </svg>
             </div>
-            <h3 class="feature-title">Indexed removal</h3>
+            <h3 class="feature-title">Eliminación por índice</h3>
             <p class="feature-desc">
-              Every participant and guest is numbered in the <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!status</code> output. Remove anyone by number with <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!leave 3</code> — no ambiguity.
+              Cada participante e invitado está numerado en la salida de <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!status</code>. Elimina a cualquier persona por número con <code style="font-family:'JetBrains Mono',monospace;font-size:0.85em;background:var(--color-accent-subtle);padding:2px 6px;border-radius:4px;">!leave 3</code> — sin ambigüedad.
             </p>
           </article>
 
@@ -856,9 +856,9 @@
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
               </svg>
             </div>
-            <h3 class="feature-title">Lightweight engine</h3>
+            <h3 class="feature-title">Motor ligero</h3>
             <p class="feature-desc">
-              Built on Baileys (no Chromium, no Puppeteer) with SQLite via better-sqlite3. Runs comfortably on a 1 GB VPS. Ships as a single Docker image under 200 MB.
+              Construido sobre Baileys (sin Chromium, sin Puppeteer) con SQLite a través de better-sqlite3. Funciona cómodamente en un VPS de 1 GB. Se envía como una única imagen Docker de menos de 200 MB.
             </p>
           </article>
         </div>
@@ -870,8 +870,8 @@
     <!-- ===== Try It Out Section ===== -->
     <section class="quickstart" id="quickstart">
       <div class="container">
-        <p class="section-label fade-in">Try it out</p>
-        <h2 class="section-heading fade-in">Running in under 60 seconds</h2>
+        <p class="section-label fade-in">Pruébalo</p>
+        <h2 class="section-heading fade-in">Funcionando en menos de 60 segundos</h2>
 
         <div class="terminal fade-in">
           <div class="terminal-header">
@@ -881,21 +881,21 @@
             <span class="terminal-title">Terminal</span>
           </div>
           <div class="terminal-body">
-            <pre><span class="comment"># Option 1: Docker (recommended)</span>
+            <pre><span class="comment"># Opción 1: Docker (recomendado)</span>
 <span class="command">mkdir</span> .auth_info_baileys <span class="flag">&&</span> <span class="command">touch</span> events.db
 <span class="command">docker run</span> <span class="flag">-it --rm</span> \
   <span class="flag">-v</span> <span class="string">$(pwd)/.auth_info_baileys:/app/.auth_info_baileys:z</span> \
   <span class="flag">-v</span> <span class="string">$(pwd)/events.db:/app/events.db:z</span> \
   borlafu/whatsapp-count-me-in
 
-<span class="comment"># Option 2: Run locally</span>
+<span class="comment"># Opción 2: Ejecutar localmente</span>
 <span class="command">npm install</span>
 <span class="command">npm start</span></pre>
           </div>
         </div>
 
         <p class="terminal-note fade-in">
-          <strong>Next step:</strong> after running, a QR code will appear in your terminal. Scan it from WhatsApp via <strong>Settings &rarr; Linked Devices &rarr; Link a Device</strong> to connect the bot to your account.
+          <strong>Siguiente paso:</strong> después de ejecutar, aparecerá un código QR en tu terminal. Escanéalo desde WhatsApp vía <strong>Ajustes &rarr; Dispositivos vinculados &rarr; Vincular un dispositivo</strong> para conectar el bot a tu cuenta.
         </p>
       </div>
     </section>
@@ -905,7 +905,7 @@
   <!-- ===== Footer ===== -->
   <footer>
     <div class="container footer-inner">
-      <p class="footer-text">MIT License &copy; 2026 — WhatsApp Count Me In</p>
+      <p class="footer-text">Licencia MIT &copy; 2026 — WhatsApp Count Me In</p>
       <div class="footer-links">
         <a href="https://github.com/borlafu/whatsapp-count-me-in" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://hub.docker.com/r/borlafu/whatsapp-count-me-in" target="_blank" rel="noopener noreferrer">Docker Hub</a>
