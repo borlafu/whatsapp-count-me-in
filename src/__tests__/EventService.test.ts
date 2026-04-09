@@ -109,4 +109,89 @@ describe('EventService', () => {
       expect(all.filter(p => p.status === 'waitlisted').length).toBe(2);
     });
   });
+
+  describe('makeGroups', () => {
+    it('should split 8 participants into 2 groups of 4', () => {
+      service.createEvent(chatId, 'Test Event', 10, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      for (let i = 1; i <= 8; i++) {
+        db.addParticipant(event.id, `user${i}@s.whatsapp.net`, `User ${i}`, 'joined');
+      }
+
+      const groups = service.makeGroups(event.id, 4);
+      expect(groups).toHaveLength(2);
+      expect(groups[0]).toHaveLength(4);
+      expect(groups[1]).toHaveLength(4);
+    });
+
+    it('should distribute 10 participants into groups of 4 as 4,3,3', () => {
+      service.createEvent(chatId, 'Test Event', 12, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      for (let i = 1; i <= 10; i++) {
+        db.addParticipant(event.id, `user${i}@s.whatsapp.net`, `User ${i}`, 'joined');
+      }
+
+      const groups = service.makeGroups(event.id, 4);
+      expect(groups).toHaveLength(3);
+      const sizes = groups.map(g => g.length).sort((a, b) => b - a);
+      expect(sizes).toEqual([4, 3, 3]);
+    });
+
+    it('should return a single group when membersPerGroup >= participant count', () => {
+      service.createEvent(chatId, 'Test Event', 5, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      db.addParticipant(event.id, user1, 'User One', 'joined');
+      db.addParticipant(event.id, user2, 'User Two', 'joined');
+
+      const groups = service.makeGroups(event.id, 4);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toHaveLength(2);
+    });
+
+    it('should include every participant exactly once', () => {
+      service.createEvent(chatId, 'Test Event', 12, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      for (let i = 1; i <= 7; i++) {
+        db.addParticipant(event.id, `user${i}@s.whatsapp.net`, `User ${i}`, 'joined');
+      }
+
+      const groups = service.makeGroups(event.id, 3);
+      const allIds = groups.flat().map(p => p.user_id);
+      expect(allIds).toHaveLength(7);
+      expect(new Set(allIds).size).toBe(7);
+    });
+
+    it('should only include joined participants, not waitlisted', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      db.addParticipant(event.id, user1, 'User One', 'joined');
+      db.addParticipant(event.id, user2, 'User Two', 'waitlisted');
+
+      const groups = service.makeGroups(event.id, 4);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toHaveLength(1);
+      expect(groups[0][0].user_id).toBe(user1);
+    });
+
+    it('should include pending_promotion participants', () => {
+      service.createEvent(chatId, 'Test Event', 5, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      db.addParticipant(event.id, user1, 'User One', 'joined');
+      db.addParticipant(event.id, user2, 'User Two', 'pending_promotion');
+
+      const groups = service.makeGroups(event.id, 4);
+      const allIds = groups.flat().map(p => p.user_id);
+      expect(allIds).toHaveLength(2);
+      expect(allIds).toContain(user1);
+      expect(allIds).toContain(user2);
+    });
+
+    it('should return empty array when no joined participants', () => {
+      service.createEvent(chatId, 'Test Event', 5, adminId);
+      const event = db.getActiveEvent(chatId)!;
+
+      const groups = service.makeGroups(event.id, 4);
+      expect(groups).toHaveLength(0);
+    });
+  });
 });

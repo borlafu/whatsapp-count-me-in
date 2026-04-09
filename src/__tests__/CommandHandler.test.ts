@@ -288,4 +288,106 @@ describe('CommandHandler', () => {
       }), expect.anything());
     });
   });
+
+  describe('!groups', () => {
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      await handler.handleCommand(createMockMsg('!groups'), mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Only group admins')
+      }), expect.anything());
+    });
+
+    it('should show error when no active event', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      const msg = createMockMsg('!groups', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('No active event')
+      }), expect.anything());
+    });
+
+    it('should show error when fewer than 2 joined participants', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      service.joinEvent(chatId, userId, 'User');
+      const msg = createMockMsg('!groups', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('at least 2')
+      }), expect.anything());
+    });
+
+    it('should show error for invalid group size', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      const msg = createMockMsg('!groups abc', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('must be a number')
+      }), expect.anything());
+    });
+
+    it('should show error for group size less than 2', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      const msg = createMockMsg('!groups 1', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('must be a number')
+      }), expect.anything());
+    });
+
+    it('should default to groups of 4', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      for (let i = 1; i <= 8; i++) {
+        service.joinEvent(chatId, `u${i}@s.whatsapp.net`, `User ${i}`);
+      }
+      const msg = createMockMsg('!groups', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringMatching(/Random Groups \(of 4\)/)
+      }), expect.anything());
+    });
+
+    it('should accept custom group size', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      for (let i = 1; i <= 6; i++) {
+        service.joinEvent(chatId, `u${i}@s.whatsapp.net`, `User ${i}`);
+      }
+      const msg = createMockMsg('!groups 3', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringMatching(/Random Groups \(of 3\)/)
+      }), expect.anything());
+    });
+
+    it('should display group labels and participant names', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 10, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'Alice');
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'Bob');
+      service.joinEvent(chatId, 'u3@s.whatsapp.net', 'Carol');
+      const msg = createMockMsg('!groups 2', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      const sentText = mockSock.sendMessage.mock.calls[0][1].text;
+      expect(sentText).toContain('Group 1:');
+      expect(sentText).toContain('Group 2:');
+    });
+
+    it('should work with Spanish alias !sorteo', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Fiesta', 10, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'Alice');
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'Bob');
+      const msg = createMockMsg('!sorteo', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Group')
+      }), expect.anything());
+    });
+  });
 });

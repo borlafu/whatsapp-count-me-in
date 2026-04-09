@@ -60,6 +60,12 @@ interface MessageTemplates {
   guestJoinedWaitlist: (guestName: string, inviterName: string, title: string) => string;
   statusGuest: (guestName: string, inviterName: string) => string;
 
+  // Groups
+  groupsHeader: (size: number) => string;
+  groupLabel: (index: number) => string;
+  groupsNotEnough: () => string;
+  groupsInvalidSize: () => string;
+
   // Help
   helpMessage: () => string;
 }
@@ -103,6 +109,10 @@ const messages: Record<Locale, MessageTemplates> = {
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invited by ${inviterName}) has joined "${title}".`,
     guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invited by ${inviterName}) has been added to the waitlist for "${title}".`,
     statusGuest: (guestName, inviterName) => `${guestName} (${inviterName}'s guest)`,
+    groupsHeader: (size) => `Random Groups (of ${size}):`,
+    groupLabel: (index) => `Group ${index}:`,
+    groupsNotEnough: () => 'Need at least 2 joined participants to form groups.',
+    groupsInvalidSize: () => 'Group size must be a number 2 or greater. Usage: !groups [size]',
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
       `*!create "Title" <slots>*  — Create an event (admin only)\n` +
@@ -115,6 +125,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!rename "New Title"*  — Rename the active event (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
+      `*!groups [size]*  — Randomly assign participants into groups (admin only)\n` +
       `*!help*  — Show this message`,
   },
   es: {
@@ -155,6 +166,10 @@ const messages: Record<Locale, MessageTemplates> = {
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invitado/a por ${inviterName}) se ha unido a "${title}".`,
     guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invitado/a por ${inviterName}) ha sido añadido/a a la lista de espera de "${title}".`,
     statusGuest: (guestName, inviterName) => `${guestName} (invitado/a de ${inviterName})`,
+    groupsHeader: (size) => `Grupos Aleatorios (de ${size}):`,
+    groupLabel: (index) => `Grupo ${index}:`,
+    groupsNotEnough: () => 'Se necesitan al menos 2 participantes para formar grupos.',
+    groupsInvalidSize: () => 'El tamaño del grupo debe ser un número de 2 o mayor. Uso: !grupos [tamaño]',
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
       `*!crear "Título" <plazas>*  — Crear un evento (solo admins)\n` +
@@ -167,6 +182,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
+      `*!grupos [tamaño]*  — Asignar participantes en grupos aleatorios (solo admins)\n` +
       `*!ayuda*  — Mostrar este mensaje`,
   },
 };

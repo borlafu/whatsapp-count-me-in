@@ -64,6 +64,9 @@ export class CommandHandler {
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
           break;
+        case 'groups':
+          await this.handleGroups(msg, chatId, senderId, args, sock, locale);
+          break;
         case 'help':
           await this.safeReply(msg, chatId, sock, t(locale, 'helpMessage'));
           break;
@@ -203,6 +206,45 @@ export class CommandHandler {
     }
     const result = this.eventService.cancelEvent(chatId);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleGroups(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
+    }
+
+    let membersPerGroup = 4;
+    if (args[0]) {
+      membersPerGroup = parseInt(args[0]);
+      if (isNaN(membersPerGroup) || membersPerGroup < 2) {
+        return await this.safeReply(msg, chatId, sock, t(locale, 'groupsInvalidSize'));
+      }
+    }
+
+    const groups = this.eventService.makeGroups(event.id, membersPerGroup);
+    const totalParticipants = groups.reduce((sum, g) => sum + g.length, 0);
+
+    if (totalParticipants < 2) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'groupsNotEnough'));
+    }
+
+    let text = `${t(locale, 'groupsHeader', membersPerGroup)}\n`;
+    groups.forEach((group, i) => {
+      text += `\n${t(locale, 'groupLabel', i + 1)}\n`;
+      group.forEach(p => {
+        const displayName = p.invited_by
+          ? t(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin')
+          : p.user_name;
+        text += `- ${displayName}\n`;
+      });
+    });
+
+    await this.safeReply(msg, chatId, sock, text);
   }
 
   private async handleStatus(msg: WAMessage, chatId: string, sock: WASocket, locale: Locale) {

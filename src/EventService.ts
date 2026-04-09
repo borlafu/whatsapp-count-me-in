@@ -230,4 +230,27 @@ export class EventService {
       }
     };
   }
+
+  makeGroups(eventId: number, membersPerGroup: number = 4): Participant[][] {
+    const participants = this.db.getParticipants(eventId);
+    const joined = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion');
+
+    if (joined.length === 0) return [];
+
+    // Fisher-Yates shuffle
+    for (let i = joined.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [joined[i], joined[j]] = [joined[j], joined[i]];
+    }
+
+    const numGroups = Math.ceil(joined.length / membersPerGroup);
+    const groups: Participant[][] = Array.from({ length: numGroups }, () => []);
+
+    // Round-robin distribution
+    for (let i = 0; i < joined.length; i++) {
+      groups[i % numGroups].push(joined[i]);
+    }
+
+    return groups;
+  }
 }
