@@ -11,6 +11,10 @@ export interface WhatsAppEvent {
   created_by: string;
   status: 'active' | 'completed' | 'cancelled';
   created_at: string;
+  event_at?: string;
+  timezone?: string;
+  close_and_group_offset_min?: number;
+  groups_triggered?: number;
 }
 
 export interface Participant {
@@ -24,6 +28,8 @@ export interface Participant {
   joined_at: string;
 }
 
+const CURRENT_SCHEMA_VERSION = 2;
+
 export class DatabaseManager {
   private db: Database.Database;
 
@@ -35,6 +41,11 @@ export class DatabaseManager {
 
   private initSchema() {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id TEXT NOT NULL,
@@ -52,8 +63,6 @@ export class DatabaseManager {
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
         status TEXT NOT NULL,
-        invited_by TEXT,
-        invited_by_name TEXT,
         joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (event_id) REFERENCES events(id)
       );
@@ -64,18 +73,28 @@ export class DatabaseManager {
       );
     `);
 
-    // Migration: Add guest-related columns to participants if they don't exist
-    const columns = this.db.prepare('PRAGMA table_info(participants)').all() as any[];
-    const columnNames = columns.map(c => c.name);
+    const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
+    const version = parseInt(row?.value ?? '0');
 
-    if (!columnNames.includes('invited_by')) {
-      console.log('Migrating database: Adding invited_by column to participants table...');
-      this.db.exec('ALTER TABLE participants ADD COLUMN invited_by TEXT');
+    if (version < 1) {
+      this.db.exec(`
+        ALTER TABLE participants ADD COLUMN invited_by TEXT;
+        ALTER TABLE participants ADD COLUMN invited_by_name TEXT;
+      `);
     }
-    if (!columnNames.includes('invited_by_name')) {
-      console.log('Migrating database: Adding invited_by_name column to participants table...');
-      this.db.exec('ALTER TABLE participants ADD COLUMN invited_by_name TEXT');
+
+    if (version < 2) {
+      this.db.exec(`
+        ALTER TABLE events ADD COLUMN event_at TEXT;
+        ALTER TABLE events ADD COLUMN timezone TEXT;
+        ALTER TABLE events ADD COLUMN close_and_group_offset_min INTEGER;
+        ALTER TABLE events ADD COLUMN groups_triggered INTEGER DEFAULT 0;
+        ALTER TABLE chat_settings ADD COLUMN reminders_enabled INTEGER DEFAULT 1;
+      `);
     }
+
+    this.db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+      .run(String(CURRENT_SCHEMA_VERSION));
   }
 
   getLocale(chatId: string): Locale {
@@ -87,17 +106,40 @@ export class DatabaseManager {
     this.db.prepare('INSERT INTO chat_settings (chat_id, locale) VALUES (?, ?) ON CONFLICT(chat_id) DO UPDATE SET locale = excluded.locale').run(chatId, locale);
   }
 
-  createEvent(chatId: string, title: string, slots: number, waitlistEnabled: boolean, createdBy: string): number | bigint {
+  createEvent(chatId: string, title: string, slots: number, waitlistEnabled: boolean, createdBy: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number): number | bigint {
     const stmt = this.db.prepare(`
-      INSERT INTO events (chat_id, title, slots, waitlist_enabled, created_by)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO events (chat_id, title, slots, waitlist_enabled, created_by, event_at, timezone, close_and_group_offset_min)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const info = stmt.run(chatId, title, slots, waitlistEnabled ? 1 : 0, createdBy);
+    const info = stmt.run(chatId, title, slots, waitlistEnabled ? 1 : 0, createdBy, eventAt ?? null, timezone ?? null, closeAndGroupOffsetMin ?? null);
     return info.lastInsertRowid;
   }
 
   getActiveEvent(chatId: string): WhatsAppEvent | undefined {
-    return this.db.prepare('SELECT * FROM events WHERE chat_id = ? AND status = \'active\' ORDER BY created_at DESC LIMIT 1').get(chatId) as WhatsAppEvent | undefined;
+    return this.db.prepare(`SELECT * FROM events WHERE chat_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`).get(chatId) as WhatsAppEvent | undefined;
+  }
+
+  getActiveTimedEvents(): WhatsAppEvent[] {
+    return this.db.prepare(`SELECT * FROM events WHERE status = 'active' AND event_at IS NOT NULL`).all() as WhatsAppEvent[];
+  }
+
+  updateEventSchedule(eventId: number | bigint, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number): void {
+    this.db.prepare(`UPDATE events SET event_at = ?, timezone = ?, close_and_group_offset_min = ?, groups_triggered = 0 WHERE id = ?`)
+      .run(eventAt, timezone, closeAndGroupOffsetMin ?? null, eventId);
+  }
+
+  setGroupsTriggered(eventId: number | bigint): void {
+    this.db.prepare(`UPDATE events SET groups_triggered = 1 WHERE id = ?`).run(eventId);
+  }
+
+  getRemindersEnabled(chatId: string): boolean {
+    const row = this.db.prepare(`SELECT reminders_enabled FROM chat_settings WHERE chat_id = ?`).get(chatId) as { reminders_enabled: number } | undefined;
+    return (row?.reminders_enabled ?? 1) === 1;
+  }
+
+  setRemindersEnabled(chatId: string, enabled: boolean): void {
+    this.db.prepare(`INSERT INTO chat_settings (chat_id, locale, reminders_enabled) VALUES (?, 'en', ?) ON CONFLICT(chat_id) DO UPDATE SET reminders_enabled = excluded.reminders_enabled`)
+      .run(chatId, enabled ? 1 : 0);
   }
 
   addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status'], invitedBy?: string, invitedByName?: string) {
@@ -109,44 +151,42 @@ export class DatabaseManager {
   }
 
   getParticipants(eventId: number | bigint): Participant[] {
-    return this.db.prepare('SELECT * FROM participants WHERE event_id = ? AND status IN (\'joined\', \'waitlisted\', \'pending_promotion\') ORDER BY joined_at ASC').all(eventId) as Participant[];
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status IN ('joined', 'waitlisted', 'pending_promotion') ORDER BY joined_at ASC`).all(eventId) as Participant[];
   }
 
   getParticipant(eventId: number | bigint, userId: string): Participant | undefined {
-    return this.db.prepare('SELECT * FROM participants WHERE event_id = ? AND user_id = ? AND status NOT IN (\'withdrawn\')').get(eventId, userId) as Participant | undefined;
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`).get(eventId, userId) as Participant | undefined;
   }
 
   updateParticipantStatus(eventId: number | bigint, userId: string, status: Participant['status']) {
-    const stmt = this.db.prepare('UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ?');
-    return stmt.run(status, eventId, userId);
+    return this.db.prepare(`UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ?`).run(status, eventId, userId);
   }
 
   withdrawParticipant(eventId: number | bigint, userId: string) {
-    const stmt = this.db.prepare('UPDATE participants SET status = \'withdrawn\' WHERE event_id = ? AND user_id = ?');
-    return stmt.run(eventId, userId);
+    return this.db.prepare(`UPDATE participants SET status = 'withdrawn' WHERE event_id = ? AND user_id = ?`).run(eventId, userId);
   }
 
   cancelEvent(eventId: number | bigint) {
-    const stmt = this.db.prepare('UPDATE events SET status = \'cancelled\' WHERE id = ?');
-    return stmt.run(eventId);
+    return this.db.prepare(`UPDATE events SET status = 'cancelled' WHERE id = ?`).run(eventId);
   }
 
   updateEventSlots(eventId: number | bigint, slots: number) {
-    return this.db.prepare('UPDATE events SET slots = ? WHERE id = ?').run(slots, eventId);
+    return this.db.prepare(`UPDATE events SET slots = ? WHERE id = ?`).run(slots, eventId);
   }
 
   updateEventTitle(eventId: number | bigint, title: string) {
-    return this.db.prepare('UPDATE events SET title = ? WHERE id = ?').run(title, eventId);
+    return this.db.prepare(`UPDATE events SET title = ? WHERE id = ?`).run(title, eventId);
   }
 
   getNextInWaitlist(eventId: number | bigint): Participant | undefined {
-    return this.db.prepare('SELECT * FROM participants WHERE event_id = ? AND status = \'waitlisted\' ORDER BY joined_at ASC LIMIT 1').get(eventId) as Participant | undefined;
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' ORDER BY joined_at ASC LIMIT 1`).get(eventId) as Participant | undefined;
   }
 
   clearDatabase() {
     this.db.prepare('DELETE FROM participants').run();
     this.db.prepare('DELETE FROM events').run();
     this.db.prepare('DELETE FROM chat_settings').run();
+    this.db.prepare(`DELETE FROM meta`).run();
   }
 
   close() {

@@ -12,6 +12,7 @@ interface MessageTemplates {
   // Create
   createUsage: () => string;
   eventCreated: (title: string, slots: number) => string;
+  eventScheduled: (title: string, slots: number, dateStr: string) => string;
   activeEventExists: () => string;
 
   // Join
@@ -22,6 +23,7 @@ interface MessageTemplates {
   joinedWaitlist: (mention: string, title: string) => string;
   confirmedSpot: (mention: string, title: string) => string;
   eventFullNoWaitlist: () => string;
+  registrationsClosed: () => string;
 
   // Leave
   notSignedUp: () => string;
@@ -50,6 +52,9 @@ interface MessageTemplates {
   statusParticipants: () => string;
   statusPendingTag: () => string;
   statusWaitlist: () => string;
+  statusEventDate: (dateStr: string) => string;
+  statusCountdown: (countdown: string) => string;
+  statusCountdownSoon: () => string;
 
   // Promotion
   slotOpened: (mention: string, title: string) => string;
@@ -65,6 +70,17 @@ interface MessageTemplates {
   groupLabel: (index: number) => string;
   groupsNotEnough: () => string;
   groupsInvalidSize: () => string;
+  closedForGroups: (title: string) => string;
+
+  // Reschedule
+  rescheduleUsage: () => string;
+  eventRescheduled: (dateStr: string) => string;
+
+  // Reminders
+  remindersUsage: () => string;
+  remindersOn: () => string;
+  remindersOff: () => string;
+  reminderMessage: (title: string, available: number, total: number, countdown: string) => string;
 
   // Help
   helpMessage: () => string;
@@ -76,8 +92,9 @@ const messages: Record<Locale, MessageTemplates> = {
     langChanged: (lang) => `🌐 Language changed to *${lang === 'en' ? 'English' : 'Spanish'}*.`,
     langUsage: () => 'Usage: !lang en|es',
     langInvalid: () => 'Supported languages: en, es',
-    createUsage: () => 'Usage: !create "Event Title" [Max Slots]',
+    createUsage: () => 'Usage: !create "Event Title" <slots> [YYYY-MM-DD HH:MM Timezone] [--close-and-group Xh]',
     eventCreated: (title, slots) => `✅ Event "${title}" created!\nSlots: ${slots}\nUse !join to sign up.`,
+    eventScheduled: (title, slots, dateStr) => `✅ Event "${title}" created!\nSlots: ${slots}\n📅 ${dateStr}\nUse !join to sign up.`,
     activeEventExists: () => 'There is already an active event in this group.',
     noActiveEvent: () => 'No active event in this group.',
     alreadyJoined: () => 'You are already signed up.',
@@ -86,6 +103,7 @@ const messages: Record<Locale, MessageTemplates> = {
     joinedWaitlist: (mention, title) => `⏳ @${mention}, you have been added to the waitlist for "${title}".`,
     confirmedSpot: (mention, title) => `✅ @${mention}, you have confirmed your spot in "${title}"!`,
     eventFullNoWaitlist: () => 'Sorry, the event is full and waitlist is disabled.',
+    registrationsClosed: () => 'Registrations are closed for this event.',
     notSignedUp: () => 'You are not signed up for this event.',
     withdrawn: (mention, title) => `❌ @${mention}, you have withdrawn from "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (inviter: ${inviterName}) has been withdrawn from "${title}".`,
@@ -104,6 +122,9 @@ const messages: Record<Locale, MessageTemplates> = {
     statusParticipants: () => '✅ *Participants:*',
     statusPendingTag: () => '(Pending)',
     statusWaitlist: () => '⏳ *Waitlist:*',
+    statusEventDate: (dateStr) => `📅 ${dateStr}`,
+    statusCountdown: (countdown) => `⏱ In ${countdown}`,
+    statusCountdownSoon: () => `⏱ Starting soon!`,
     slotOpened: (mention, title) => `🔊 Attention @${mention}! A slot opened up for "${title}".\nReply with !join to confirm or !leave to decline.`,
     inviteUsage: () => 'Usage: !invite "Guest Name"',
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invited by ${inviterName}) has joined "${title}".`,
@@ -113,9 +134,17 @@ const messages: Record<Locale, MessageTemplates> = {
     groupLabel: (index) => `Group ${index}:`,
     groupsNotEnough: () => 'Need at least 2 joined participants to form groups.',
     groupsInvalidSize: () => 'Group size must be a number 2 or greater. Usage: !groups [size]',
+    closedForGroups: (title) => `🔒 Registrations for "${title}" are now closed. Here are the groups:`,
+    rescheduleUsage: () => 'Usage: !reschedule YYYY-MM-DD HH:MM Timezone [--close-and-group Xh]',
+    eventRescheduled: (dateStr) => `📅 Event rescheduled to ${dateStr}.`,
+    remindersUsage: () => 'Usage: !reminders on|off',
+    remindersOn: () => '🔔 Daily reminders enabled.',
+    remindersOff: () => '🔕 Daily reminders disabled.',
+    reminderMessage: (title, available, total, countdown) =>
+      `🔔 *Reminder: "${title}"*\nSlots available: ${available}/${total}\n⏱ ${countdown} to go!\nUse !join to sign up.`,
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
-      `*!create "Title" <slots>*  — Create an event (admin only)\n` +
+      `*!create "Title" <slots> [date time TZ] [--close-and-group Xh]*  — Create an event (admin only)\n` +
       `*!join*  — Sign up for the active event\n` +
       `*!waitlist*  — Join the waitlist directly\n` +
       `*!leave [number]*  — Withdraw yourself or your guest (by index)\n` +
@@ -123,6 +152,8 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!invite "Name"*  — Invite a guest by name\n` +
       `*!resize <slots>*  — Update max slots (admin only)\n` +
       `*!rename "New Title"*  — Rename the active event (admin only)\n` +
+      `*!reschedule YYYY-MM-DD HH:MM TZ*  — Update event date/time (admin only)\n` +
+      `*!reminders on|off*  — Toggle daily reminders (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
       `*!groups [size]*  — Randomly assign participants into groups (admin only)\n` +
@@ -133,8 +164,9 @@ const messages: Record<Locale, MessageTemplates> = {
     langChanged: (lang) => `🌐 Idioma cambiado a *${lang === 'en' ? 'Inglés' : 'Español'}*.`,
     langUsage: () => 'Uso: !idioma en|es',
     langInvalid: () => 'Idiomas disponibles: en, es',
-    createUsage: () => 'Uso: !crear "Título del Evento" [Plazas]',
+    createUsage: () => 'Uso: !crear "Título del Evento" <plazas> [YYYY-MM-DD HH:MM Zona] [--close-and-group Xh]',
     eventCreated: (title, slots) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\nUsa !unirse para apuntarte.`,
+    eventScheduled: (title, slots, dateStr) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\n📅 ${dateStr}\nUsa !unirse para apuntarte.`,
     activeEventExists: () => 'Ya hay un evento activo en este grupo.',
     noActiveEvent: () => 'No hay ningún evento activo en este grupo.',
     alreadyJoined: () => 'Ya estás apuntado/a.',
@@ -143,6 +175,7 @@ const messages: Record<Locale, MessageTemplates> = {
     joinedWaitlist: (mention, title) => `⏳ @${mention}, has sido añadido/a a la lista de espera de "${title}".`,
     confirmedSpot: (mention, title) => `✅ @${mention}, has confirmado tu plaza en "${title}"!`,
     eventFullNoWaitlist: () => 'Lo sentimos, el evento está lleno y la lista de espera está desactivada.',
+    registrationsClosed: () => 'Las inscripciones para este evento están cerradas.',
     notSignedUp: () => 'No estás apuntado/a a este evento.',
     withdrawn: (mention, title) => `❌ @${mention}, te has retirado de "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (invitante: ${inviterName}) ha sido retirado/a de "${title}".`,
@@ -161,6 +194,9 @@ const messages: Record<Locale, MessageTemplates> = {
     statusParticipants: () => '✅ *Participantes:*',
     statusPendingTag: () => '(Pendiente)',
     statusWaitlist: () => '⏳ *Lista de espera:*',
+    statusEventDate: (dateStr) => `📅 ${dateStr}`,
+    statusCountdown: (countdown) => `⏱ En ${countdown}`,
+    statusCountdownSoon: () => `⏱ ¡Empieza pronto!`,
     slotOpened: (mention, title) => `🔊 ¡Atención @${mention}! Se ha liberado una plaza en "${title}".\nResponde con !unirse para confirmar o !salir para rechazar.`,
     inviteUsage: () => 'Uso: !invitar "Nombre del Invitado"',
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invitado/a por ${inviterName}) se ha unido a "${title}".`,
@@ -170,9 +206,17 @@ const messages: Record<Locale, MessageTemplates> = {
     groupLabel: (index) => `Grupo ${index}:`,
     groupsNotEnough: () => 'Se necesitan al menos 2 participantes para formar grupos.',
     groupsInvalidSize: () => 'El tamaño del grupo debe ser un número de 2 o mayor. Uso: !grupos [tamaño]',
+    closedForGroups: (title) => `🔒 Las inscripciones para "${title}" están cerradas. Aquí están los grupos:`,
+    rescheduleUsage: () => 'Uso: !reprogramar YYYY-MM-DD HH:MM Zona [--close-and-group Xh]',
+    eventRescheduled: (dateStr) => `📅 Evento reprogramado para ${dateStr}.`,
+    remindersUsage: () => 'Uso: !recordatorios on|off',
+    remindersOn: () => '🔔 Recordatorios diarios activados.',
+    remindersOff: () => '🔕 Recordatorios diarios desactivados.',
+    reminderMessage: (title, available, total, countdown) =>
+      `🔔 *Recordatorio: "${title}"*\nPlazas disponibles: ${available}/${total}\n⏱ ¡Faltan ${countdown}!\nUsa !unirse para apuntarte.`,
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
-      `*!crear "Título" <plazas>*  — Crear un evento (solo admins)\n` +
+      `*!crear "Título" <plazas> [fecha hora TZ] [--close-and-group Xh]*  — Crear un evento (solo admins)\n` +
       `*!unirse*  — Apuntarse al evento activo\n` +
       `*!espera*  — Unirse a la lista de espera\n` +
       `*!salir [número]*  — Retirarte tú o a tus invitados (por índice)\n` +
@@ -180,6 +224,8 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!invitar "Nombre"*  — Invitar a un externo por nombre\n` +
       `*!plazas <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
+      `*!reprogramar YYYY-MM-DD HH:MM TZ*  — Actualizar fecha/hora (solo admins)\n` +
+      `*!recordatorios on|off*  — Activar/desactivar recordatorios diarios (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
       `*!grupos [tamaño]*  — Asignar participantes en grupos aleatorios (solo admins)\n` +

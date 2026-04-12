@@ -4,11 +4,13 @@ import qrcode from 'qrcode';
 import { DatabaseManager } from './Database.js';
 import { EventService } from './EventService.js';
 import { CommandHandler } from './CommandHandler.js';
+import { Scheduler } from './Scheduler.js';
 
 class WhatsAppBot {
   private db: DatabaseManager;
   private eventService: EventService;
   private commandHandler: CommandHandler;
+  private scheduler: Scheduler | null = null;
 
   constructor() {
     this.db = new DatabaseManager();
@@ -43,6 +45,8 @@ class WhatsAppBot {
       }
 
       if (connection === 'close') {
+        this.scheduler?.stop();
+        this.scheduler = null;
         const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
         console.log('Connection closed due to ', lastDisconnect?.error?.message);
         if (shouldReconnect) {
@@ -54,6 +58,13 @@ class WhatsAppBot {
         }
       } else if (connection === 'open') {
         console.log('WhatsApp Count Me In is ready!');
+        this.scheduler = new Scheduler(
+          this.db,
+          this.eventService,
+          async (chatId, text) => { await sock.sendMessage(chatId, { text }); },
+          (chatId) => this.db.getLocale(chatId),
+        );
+        this.scheduler.start();
       }
     });
 

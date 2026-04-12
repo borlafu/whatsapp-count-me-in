@@ -4,6 +4,8 @@ import type { DatabaseManager } from './Database.js';
 import { t, type Locale } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
+import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes } from './EventService.js';
+import type { Participant } from './Database.js';
 
 export class CommandHandler {
   constructor(
@@ -67,6 +69,12 @@ export class CommandHandler {
         case 'groups':
           await this.handleGroups(msg, chatId, senderId, args, sock, locale);
           break;
+        case 'reschedule':
+          await this.handleReschedule(msg, chatId, senderId, args, sock, locale);
+          break;
+        case 'reminders':
+          await this.handleReminders(msg, chatId, senderId, args, sock, locale);
+          break;
         case 'help':
           await this.safeReply(msg, chatId, sock, t(locale, 'helpMessage'));
           break;
@@ -105,14 +113,79 @@ export class CommandHandler {
     if (!(await this.isAdmin(chatId, userId, sock))) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
-    const title = (args[0] ?? "").trim().substring(0, 100);
-    const slots = parseInt(args[1] ?? "0");
+    const title = (args[0] ?? '').trim().substring(0, 100);
+    const slots = parseInt(args[1] ?? '0');
     if (!title || slots <= 0) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
     }
 
-    const result = this.eventService.createEvent(chatId, title, slots, userId);
+    // Optional: YYYY-MM-DD HH:MM TZ
+    let eventAt: string | undefined;
+    let timezone: string | undefined;
+    let closeAndGroupOffsetMin: number | undefined;
+
+    if (args[2] && /^\d{4}-\d{2}-\d{2}$/.test(args[2])) {
+      const dateStr = args[2]!;
+      const timeStr = args[3] ?? '00:00';
+      const tz = args[4];
+      if (!tz) {
+        return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
+      }
+      const utc = localToUtc(dateStr, timeStr, tz);
+      if (!utc) {
+        return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
+      }
+      eventAt = utc;
+      timezone = tz;
+
+      // Scan for --close-and-group flag anywhere in remaining args
+      const flagIdx = args.indexOf('--close-and-group');
+      if (flagIdx !== -1 && args[flagIdx + 1]) {
+        const mins = parseOffsetToMinutes(args[flagIdx + 1]!);
+        if (mins !== null && mins > 0) closeAndGroupOffsetMin = mins;
+      }
+    }
+
+    const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleReschedule(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const dateStr = args[0];
+    const timeStr = args[1];
+    const tz = args[2];
+    if (!dateStr || !timeStr || !tz || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'rescheduleUsage'));
+    }
+    const utc = localToUtc(dateStr, timeStr, tz);
+    if (!utc) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'rescheduleUsage'));
+    }
+
+    let closeAndGroupOffsetMin: number | undefined;
+    const flagIdx = args.indexOf('--close-and-group');
+    if (flagIdx !== -1 && args[flagIdx + 1]) {
+      const mins = parseOffsetToMinutes(args[flagIdx + 1]!);
+      if (mins !== null && mins > 0) closeAndGroupOffsetMin = mins;
+    }
+
+    const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleReminders(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const val = args[0]?.toLowerCase();
+    if (val !== 'on' && val !== 'off') {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'remindersUsage'));
+    }
+    this.db.setRemindersEnabled(chatId, val === 'on');
+    await this.safeReply(msg, chatId, sock, t(locale, val === 'on' ? 'remindersOn' : 'remindersOff'));
   }
 
   private async handleJoin(msg: WAMessage, chatId: string, userId: string, userName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
@@ -133,7 +206,7 @@ export class CommandHandler {
     if (!guestName) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'inviteUsage'));
     }
- 
+
     const result = this.eventService.inviteGuest(chatId, userId, userName, guestName);
 
     if (result.showStatus) {
@@ -159,9 +232,6 @@ export class CommandHandler {
       return;
     }
 
-    const options: { mentions?: string[] } = {};
-    if (result.mentions) options.mentions = result.mentions;
-
     if (result.promotion) {
       const p = result.promotion;
       await sock.sendMessage(chatId, {
@@ -173,6 +243,8 @@ export class CommandHandler {
     if (result.showStatus) {
       await this.handleStatus(msg, chatId, sock, locale);
     } else {
+      const options: { mentions?: string[] } = {};
+      if (result.mentions) options.mentions = result.mentions;
       await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
     }
   }
@@ -227,27 +299,14 @@ export class CommandHandler {
     }
 
     const groups = this.eventService.makeGroups(event.id, membersPerGroup);
-    const totalParticipants = groups.reduce((sum, g) => sum + g.length, 0);
-
-    if (totalParticipants < 2) {
+    const text = formatGroups(groups, membersPerGroup, locale, t);
+    if (!text) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'groupsNotEnough'));
     }
-
-    let text = `${t(locale, 'groupsHeader', membersPerGroup)}\n`;
-    groups.forEach((group, i) => {
-      text += `\n${t(locale, 'groupLabel', i + 1)}\n`;
-      group.forEach(p => {
-        const displayName = p.invited_by
-          ? t(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin')
-          : p.user_name;
-        text += `- ${displayName}\n`;
-      });
-    });
-
     await this.safeReply(msg, chatId, sock, text);
   }
 
-  private async handleStatus(msg: WAMessage, chatId: string, sock: WASocket, locale: Locale) {
+  async handleStatus(msg: WAMessage, chatId: string, sock: WASocket, locale: Locale) {
     const result = this.eventService.getStatus(chatId);
     if (!result.success) {
       return await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
@@ -257,8 +316,20 @@ export class CommandHandler {
     const waitlisted = data.participants.filter((p: any) => p.status === 'waitlisted');
 
     let text = `${t(locale, 'statusHeader', data.title)}\n`;
-    text += `${t(locale, 'statusSlots', joined.length, data.slots)}\n\n`;
-    text += `${t(locale, 'statusParticipants')}\n`;
+    text += `${t(locale, 'statusSlots', joined.length, data.slots)}\n`;
+
+    if (data.event_at && data.timezone) {
+      const dateStr = formatEventDate(data.event_at, data.timezone);
+      text += `${t(locale, 'statusEventDate', dateStr)}\n`;
+      const msUntil = Date.parse(data.event_at) - Date.now();
+      if (msUntil > 60_000) {
+        text += `${t(locale, 'statusCountdown', formatCountdown(msUntil))}\n`;
+      } else if (msUntil > 0) {
+        text += `${t(locale, 'statusCountdownSoon')}\n`;
+      }
+    }
+
+    text += `\n${t(locale, 'statusParticipants')}\n`;
     joined.forEach((p: any, i: number) => {
       const displayName = p.invited_by ? t(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin') : p.user_name;
       text += `${i + 1}. ${displayName} ${p.status === 'pending_promotion' ? t(locale, 'statusPendingTag') : ''}\n`;
@@ -280,4 +351,27 @@ export class CommandHandler {
       await sock.sendMessage(chatId, { text, mentions: options.mentions || [] });
     }
   }
+}
+
+/** Shared helper: formats groups output. Returns empty string if not enough participants. */
+export function formatGroups(
+  groups: Participant[][],
+  membersPerGroup: number,
+  locale: Locale,
+  tFn: typeof t
+): string {
+  const totalParticipants = groups.reduce((sum, g) => sum + g.length, 0);
+  if (totalParticipants < 2) return '';
+
+  let text = `${tFn(locale, 'groupsHeader', membersPerGroup)}\n`;
+  groups.forEach((group, i) => {
+    text += `\n${tFn(locale, 'groupLabel', i + 1)}\n`;
+    group.forEach(p => {
+      const displayName = p.invited_by
+        ? tFn(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin')
+        : p.user_name;
+      text += `- ${displayName}\n`;
+    });
+  });
+  return text;
 }
