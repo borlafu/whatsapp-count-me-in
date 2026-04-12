@@ -240,7 +240,7 @@ export class EventService {
     // Fisher-Yates shuffle
     for (let i = joined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [joined[i], joined[j]] = [joined[j], joined[i]];
+      const tmp = joined[i]!; joined[i] = joined[j]!; joined[j] = tmp;
     }
 
     const numGroups = Math.ceil(joined.length / membersPerGroup);
@@ -248,7 +248,7 @@ export class EventService {
 
     // Round-robin distribution
     for (let i = 0; i < joined.length; i++) {
-      groups[i % numGroups].push(joined[i]);
+      groups[i % numGroups]!.push(joined[i]!);
     }
 
     return groups;
