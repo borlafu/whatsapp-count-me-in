@@ -1,9 +1,13 @@
 import { DatabaseManager, type Participant } from './Database.js';
+import type { Locale } from './i18n.js';
+import { formatEventDate } from './formatters.js';
 
 export interface StatusData {
   title: string;
   slots: number;
   participants: Participant[];
+  event_at: string | undefined;
+  timezone: string | undefined;
 }
 
 export interface ServiceResult {
@@ -23,19 +27,36 @@ export interface ServiceResult {
 export class EventService {
   constructor(private db: DatabaseManager) { }
 
-  createEvent(chatId: string, title: string, slots: number, userId: string): ServiceResult {
+  createEvent(chatId: string, title: string, slots: number, userId: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
     const existing = this.db.getActiveEvent(chatId);
     if (existing) {
       return { success: false, messageKey: 'activeEventExists' };
     }
 
-    this.db.createEvent(chatId, title, slots, true, userId);
+    this.db.createEvent(chatId, title, slots, true, userId, eventAt, timezone, closeAndGroupOffsetMin);
+
+    if (eventAt && timezone) {
+      const dateStr = formatEventDate(eventAt, timezone, locale);
+      return { success: true, messageKey: 'eventScheduled', params: [title, slots, dateStr] };
+    }
     return { success: true, messageKey: 'eventCreated', params: [title, slots] };
+  }
+
+  rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+    this.db.updateEventSchedule(event.id, eventAt, timezone, closeAndGroupOffsetMin);
+    const dateStr = formatEventDate(eventAt, timezone, locale);
+    return { success: true, messageKey: 'eventRescheduled', params: [dateStr] };
   }
 
   joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
+
+    if (event.groups_triggered) {
+      return { success: false, messageKey: 'registrationsClosed' };
+    }
 
     const existing = this.db.getParticipant(event.id, userId);
     if (existing) {
@@ -85,6 +106,10 @@ export class EventService {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
 
+    if (event.groups_triggered) {
+      return { success: false, messageKey: 'registrationsClosed' };
+    }
+
     const guestId = `guest:${Date.now()}:${inviterId.split('@')[0]}`;
     const participants = this.db.getParticipants(event.id);
     const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
@@ -132,7 +157,6 @@ export class EventService {
     const participant = allDisplay[index - 1];
     if (!participant) return { success: false, messageKey: 'leaveIndexInvalid' };
 
-    // Check permissions
     const isSelf = participant.user_id === requesterId;
     const isMyGuest = participant.invited_by === requesterId;
 
@@ -151,7 +175,6 @@ export class EventService {
     let params: any[] = [participant.user_id.split('@')[0], event.title];
     let mentions: string[] = [participant.user_id];
 
-    // If it's a guest being removed by someone else
     if (participant.invited_by && requesterId && participant.user_id !== requesterId) {
       messageKey = 'guestWithdrawn';
       params = [participant.user_name, event.title, requesterId.split('@')[0]];
@@ -226,7 +249,9 @@ export class EventService {
       data: {
         title: event.title,
         slots: event.slots,
-        participants
+        participants,
+        event_at: event.event_at,
+        timezone: event.timezone,
       }
     };
   }
@@ -237,7 +262,6 @@ export class EventService {
 
     if (joined.length === 0) return [];
 
-    // Fisher-Yates shuffle
     for (let i = joined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       const tmp = joined[i]!; joined[i] = joined[j]!; joined[j] = tmp;
@@ -246,7 +270,6 @@ export class EventService {
     const numGroups = Math.ceil(joined.length / membersPerGroup);
     const groups: Participant[][] = Array.from({ length: numGroups }, () => []);
 
-    // Round-robin distribution
     for (let i = 0; i < joined.length; i++) {
       groups[i % numGroups]!.push(joined[i]!);
     }

@@ -45,6 +45,10 @@ const aliases: Record<string, string> = {
   '!grupos': 'groups',
   '!draw': 'groups',
   '!sorteo': 'groups',
+  '!reschedule': 'reschedule',
+  '!reprogramar': 'reschedule',
+  '!reminders': 'reminders',
+  '!recordatorios': 'reminders',
 };
 
 export function resolveCommand(raw: string): string | undefined {
