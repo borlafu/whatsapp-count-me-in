@@ -390,4 +390,184 @@ describe('CommandHandler', () => {
       }), expect.anything());
     });
   });
+
+  describe('!create with scheduling', () => {
+    it('should create a scheduled event', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!create "Match Day" 10 2026-04-15 18:00 Europe/Madrid', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId);
+      expect(event?.title).toBe('Match Day');
+      expect(event?.event_at).toBeDefined();
+      expect(event?.timezone).toBe('Europe/Madrid');
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('📅')
+      }), expect.anything());
+    });
+
+    it('should create a scheduled event with close-and-group flag', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!create "Match" 10 2026-04-15 18:00 UTC --close-and-group 1h', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId);
+      expect(event?.close_and_group_offset_min).toBe(60);
+    });
+
+    it('should show usage when timezone is missing', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      // Date provided but no timezone
+      const msg = createMockMsg('!create "Match" 10 2026-04-15 18:00', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+    });
+  });
+
+  describe('!reschedule', () => {
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      service.createEvent(chatId, 'Event', 10, adminId, '2026-04-15T18:00:00.000Z', 'UTC');
+
+      await handler.handleCommand(createMockMsg('!reschedule 2026-04-20 20:00 UTC'), mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Only group admins')
+      }), expect.anything());
+    });
+
+    it('should update event schedule', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      service.createEvent(chatId, 'Event', 10, adminId, '2026-04-15T18:00:00.000Z', 'UTC');
+
+      const msg = createMockMsg('!reschedule 2026-04-20 20:00 UTC', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId);
+      expect(event?.event_at).not.toBe('2026-04-15T18:00:00.000Z');
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('rescheduled')
+      }), expect.anything());
+    });
+
+    it('should show usage on invalid args', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      service.createEvent(chatId, 'Event', 10, adminId);
+
+      const msg = createMockMsg('!reschedule bad-date', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Usage')
+      }), expect.anything());
+    });
+
+    it('should support Spanish alias !reprogramar', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      service.createEvent(chatId, 'Event', 10, adminId, '2026-04-15T18:00:00.000Z', 'UTC');
+
+      const msg = createMockMsg('!reprogramar 2026-05-01 10:00 UTC', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('rescheduled')
+      }), expect.anything());
+    });
+  });
+
+  describe('!reminders', () => {
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+
+      await handler.handleCommand(createMockMsg('!reminders off'), mockSock);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Only group admins')
+      }), expect.anything());
+    });
+
+    it('should enable reminders', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      db.setRemindersEnabled(chatId, false);
+
+      const msg = createMockMsg('!reminders on', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getRemindersEnabled(chatId)).toBe(true);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('enabled')
+      }), expect.anything());
+    });
+
+    it('should disable reminders', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!reminders off', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getRemindersEnabled(chatId)).toBe(false);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('disabled')
+      }), expect.anything());
+    });
+
+    it('should show usage for invalid arg', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!reminders maybe', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Usage')
+      }), expect.anything());
+    });
+
+    it('should not overwrite existing locale when toggling reminders', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      db.setLocale(chatId, 'es');
+
+      const msg = createMockMsg('!reminders off', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getLocale(chatId)).toBe('es');
+    });
+
+    it('should support Spanish alias !recordatorios', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!recordatorios off', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getRemindersEnabled(chatId)).toBe(false);
+    });
+  });
 });

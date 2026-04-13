@@ -1,8 +1,7 @@
 import type { DatabaseManager } from './Database.js';
 import type { EventService } from './EventService.js';
-import { formatCountdown } from './EventService.js';
 import { t, type Locale } from './i18n.js';
-import { formatGroups } from './CommandHandler.js';
+import { formatCountdown, formatGroups } from './formatters.js';
 
 export class Scheduler {
   private handle: ReturnType<typeof setInterval> | null = null;
@@ -33,7 +32,8 @@ export class Scheduler {
     const utcDate = new Date(now);
     const utcHour = utcDate.getUTCHours();
     const utcMin = utcDate.getUTCMinutes();
-    const isDailyReminderWindow = utcHour === 9 && utcMin === 0;
+    const isDailyReminderWindow = utcHour === 9 && utcMin < 2;
+    const todayStr = utcDate.toISOString().slice(0, 10);
 
     for (const event of events) {
       const locale = this.getLocale(event.chat_id);
@@ -60,8 +60,12 @@ export class Scheduler {
         continue;
       }
 
-      // Daily reminder at 09:00 UTC
+      // Daily reminder at ~09:00 UTC (with dedup to prevent double sends)
       if (isDailyReminderWindow && this.db.getRemindersEnabled(event.chat_id)) {
+        const lastDate = this.db.getLastReminderDate(event.id);
+        if (lastDate === todayStr) continue;
+
+        this.db.setLastReminderDate(event.id, todayStr);
         const participants = this.db.getParticipants(event.id);
         const joinedCount = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion').length;
         const available = event.slots - joinedCount;

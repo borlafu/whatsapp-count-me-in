@@ -1,4 +1,6 @@
 import { DatabaseManager, type Participant } from './Database.js';
+import type { Locale } from './i18n.js';
+import { formatEventDate } from './formatters.js';
 
 export interface StatusData {
   title: string;
@@ -25,7 +27,7 @@ export interface ServiceResult {
 export class EventService {
   constructor(private db: DatabaseManager) { }
 
-  createEvent(chatId: string, title: string, slots: number, userId: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number): ServiceResult {
+  createEvent(chatId: string, title: string, slots: number, userId: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
     const existing = this.db.getActiveEvent(chatId);
     if (existing) {
       return { success: false, messageKey: 'activeEventExists' };
@@ -34,17 +36,17 @@ export class EventService {
     this.db.createEvent(chatId, title, slots, true, userId, eventAt, timezone, closeAndGroupOffsetMin);
 
     if (eventAt && timezone) {
-      const dateStr = formatEventDate(eventAt, timezone);
+      const dateStr = formatEventDate(eventAt, timezone, locale);
       return { success: true, messageKey: 'eventScheduled', params: [title, slots, dateStr] };
     }
     return { success: true, messageKey: 'eventCreated', params: [title, slots] };
   }
 
-  rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number): ServiceResult {
+  rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
     this.db.updateEventSchedule(event.id, eventAt, timezone, closeAndGroupOffsetMin);
-    const dateStr = formatEventDate(eventAt, timezone);
+    const dateStr = formatEventDate(eventAt, timezone, locale);
     return { success: true, messageKey: 'eventRescheduled', params: [dateStr] };
   }
 
@@ -274,71 +276,4 @@ export class EventService {
 
     return groups;
   }
-}
-
-/** Formats a UTC ISO string as a human-readable date in the given timezone. */
-export function formatEventDate(eventAt: string, timezone: string): string {
-  const date = new Date(eventAt);
-  const datePart = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(date);
-  const timePart = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
-  return `${datePart} · ${timePart}`;
-}
-
-/** Converts a local date/time string + IANA timezone to a UTC ISO string. */
-export function localToUtc(dateStr: string, timeStr: string, timezone: string): string | null {
-  try {
-    // Build a date in the target timezone by finding the UTC time that corresponds
-    // to the given local time. We use the Intl API to verify the offset.
-    const naive = new Date(`${dateStr}T${timeStr}:00`);
-    if (isNaN(naive.getTime())) return null;
-
-    // Get what the local time would be in the target TZ if we used naive as UTC
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false,
-    });
-
-    // Binary-search-free approach: use the offset from a reference point
-    // Parse the offset by formatting a known UTC time and comparing
-    const testDate = new Date(`${dateStr}T${timeStr}:00Z`);
-    const parts = formatter.formatToParts(testDate);
-    const p: Record<string, string> = {};
-    for (const part of parts) p[part.type] = part.value;
-    const localInTz = new Date(`${p['year']}-${p['month']}-${p['day']}T${p['hour']}:${p['minute']}:${p['second']}Z`);
-    const offsetMs = testDate.getTime() - localInTz.getTime();
-    const result = new Date(testDate.getTime() + offsetMs);
-    return result.toISOString();
-  } catch {
-    return null;
-  }
-}
-
-/** Returns a countdown string like "2d 4h" or "3h 20m". */
-export function formatCountdown(msUntil: number): string {
-  const totalMin = Math.floor(msUntil / 60_000);
-  const days = Math.floor(totalMin / 1440);
-  const hours = Math.floor((totalMin % 1440) / 60);
-  const mins = totalMin % 60;
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${mins}m`;
-  return `${mins}m`;
-}
-
-/** Parses an offset string like "1h", "30m", "2h30m" into minutes. Returns null if invalid. */
-export function parseOffsetToMinutes(s: string): number | null {
-  const match = s.match(/^(?:(\d+)h)?(?:(\d+)m)?$/i);
-  if (!match || (!match[1] && !match[2])) return null;
-  return (parseInt(match[1] ?? '0') * 60) + parseInt(match[2] ?? '0');
 }

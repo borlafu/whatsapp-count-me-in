@@ -15,6 +15,7 @@ export interface WhatsAppEvent {
   timezone?: string;
   close_and_group_offset_min?: number;
   groups_triggered?: number;
+  last_reminder_date?: string;
 }
 
 export interface Participant {
@@ -89,6 +90,7 @@ export class DatabaseManager {
         ALTER TABLE events ADD COLUMN timezone TEXT;
         ALTER TABLE events ADD COLUMN close_and_group_offset_min INTEGER;
         ALTER TABLE events ADD COLUMN groups_triggered INTEGER DEFAULT 0;
+        ALTER TABLE events ADD COLUMN last_reminder_date TEXT;
         ALTER TABLE chat_settings ADD COLUMN reminders_enabled INTEGER DEFAULT 1;
       `);
     }
@@ -128,6 +130,15 @@ export class DatabaseManager {
       .run(eventAt, timezone, closeAndGroupOffsetMin ?? null, eventId);
   }
 
+  getLastReminderDate(eventId: number | bigint): string | null {
+    const row = this.db.prepare(`SELECT last_reminder_date FROM events WHERE id = ?`).get(eventId) as { last_reminder_date: string | null } | undefined;
+    return row?.last_reminder_date ?? null;
+  }
+
+  setLastReminderDate(eventId: number | bigint, date: string): void {
+    this.db.prepare(`UPDATE events SET last_reminder_date = ? WHERE id = ?`).run(date, eventId);
+  }
+
   setGroupsTriggered(eventId: number | bigint): void {
     this.db.prepare(`UPDATE events SET groups_triggered = 1 WHERE id = ?`).run(eventId);
   }
@@ -138,8 +149,10 @@ export class DatabaseManager {
   }
 
   setRemindersEnabled(chatId: string, enabled: boolean): void {
-    this.db.prepare(`INSERT INTO chat_settings (chat_id, locale, reminders_enabled) VALUES (?, 'en', ?) ON CONFLICT(chat_id) DO UPDATE SET reminders_enabled = excluded.reminders_enabled`)
-      .run(chatId, enabled ? 1 : 0);
+    this.db.prepare(
+      `INSERT INTO chat_settings (chat_id, locale, reminders_enabled) VALUES (?, COALESCE((SELECT locale FROM chat_settings WHERE chat_id = ?), 'en'), ?)
+       ON CONFLICT(chat_id) DO UPDATE SET reminders_enabled = excluded.reminders_enabled`
+    ).run(chatId, chatId, enabled ? 1 : 0);
   }
 
   addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status'], invitedBy?: string, invitedByName?: string) {

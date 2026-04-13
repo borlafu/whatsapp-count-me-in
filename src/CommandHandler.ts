@@ -4,8 +4,7 @@ import type { DatabaseManager } from './Database.js';
 import { t, type Locale } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
-import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes } from './EventService.js';
-import type { Participant } from './Database.js';
+import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, formatGroups } from './formatters.js';
 
 export class CommandHandler {
   constructor(
@@ -319,7 +318,7 @@ export class CommandHandler {
     text += `${t(locale, 'statusSlots', joined.length, data.slots)}\n`;
 
     if (data.event_at && data.timezone) {
-      const dateStr = formatEventDate(data.event_at, data.timezone);
+      const dateStr = formatEventDate(data.event_at, data.timezone, locale);
       text += `${t(locale, 'statusEventDate', dateStr)}\n`;
       const msUntil = Date.parse(data.event_at) - Date.now();
       if (msUntil > 60_000) {
@@ -351,27 +350,4 @@ export class CommandHandler {
       await sock.sendMessage(chatId, { text, mentions: options.mentions || [] });
     }
   }
-}
-
-/** Shared helper: formats groups output. Returns empty string if not enough participants. */
-export function formatGroups(
-  groups: Participant[][],
-  membersPerGroup: number,
-  locale: Locale,
-  tFn: typeof t
-): string {
-  const totalParticipants = groups.reduce((sum, g) => sum + g.length, 0);
-  if (totalParticipants < 2) return '';
-
-  let text = `${tFn(locale, 'groupsHeader', membersPerGroup)}\n`;
-  groups.forEach((group, i) => {
-    text += `\n${tFn(locale, 'groupLabel', i + 1)}\n`;
-    group.forEach(p => {
-      const displayName = p.invited_by
-        ? tFn(locale, 'statusGuest', p.user_name, p.invited_by_name || 'Admin')
-        : p.user_name;
-      text += `- ${displayName}\n`;
-    });
-  });
-  return text;
 }
