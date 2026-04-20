@@ -17,7 +17,7 @@
   "license": "MIT",
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^12.9.0",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4"
   },
