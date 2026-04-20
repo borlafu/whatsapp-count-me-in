@@ -268,6 +268,35 @@ describe('Scheduler', () => {
       expect(sendMessage).not.toHaveBeenCalled();
     });
 
+    it('should not send a reminder on the same UTC day as the event', () => {
+      const eventAt = '2026-04-15T18:00:00.000Z';
+      eventService.createEvent(chatId, 'Same Day Event', 10, adminId, eventAt, 'UTC');
+
+      // "now" is 09:00 UTC on the event day
+      const nowMs = Date.parse('2026-04-15T09:00:00.000Z');
+      const s = createScheduler(nowMs);
+      s.start();
+      s.stop();
+
+      expect(sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('should not send a reminder after the draw has taken place', () => {
+      const eventAt = '2026-04-20T18:00:00.000Z';
+      eventService.createEvent(chatId, 'Drawn Event', 10, adminId, eventAt, 'UTC', 60);
+
+      // Simulate draw already done
+      const event = db.getActiveEvent(chatId)!;
+      db.setGroupsTriggered(event.id);
+
+      const nowMs = Date.parse('2026-04-16T09:00:00.000Z');
+      const s = createScheduler(nowMs);
+      s.start();
+      s.stop();
+
+      expect(sendMessage).not.toHaveBeenCalled();
+    });
+
     it('should include available slots and countdown in reminder', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
       eventService.createEvent(chatId, 'Slots Event', 5, adminId, eventAt, 'UTC');
