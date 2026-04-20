@@ -62,6 +62,12 @@ export class Scheduler {
 
       // Daily reminder at ~09:00 UTC (with dedup to prevent double sends)
       if (isDailyReminderWindow && this.db.getRemindersEnabled(event.chat_id)) {
+        // Skip reminder once the draw has run or on the event's own UTC day — otherwise
+        // participants get a redundant countdown after registrations are already closed.
+        if (event.groups_triggered) continue;
+        const eventDateStr = event.event_at!.slice(0, 10);
+        if (eventDateStr === todayStr) continue;
+
         const lastDate = this.db.getLastReminderDate(event.id);
         if (lastDate === todayStr) continue;
 
