@@ -24,12 +24,13 @@ export interface Participant {
   user_id: string;
   user_name: string;
   status: 'joined' | 'waitlisted' | 'withdrawn' | 'pending_promotion';
+  join_source?: 'join' | 'waitlist';
   invited_by?: string;
   invited_by_name?: string;
   joined_at: string;
 }
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 export class DatabaseManager {
   private db: Database.Database;
@@ -95,6 +96,10 @@ export class DatabaseManager {
       `);
     }
 
+    if (version < 3) {
+      this.db.exec(`ALTER TABLE participants ADD COLUMN join_source TEXT;`);
+    }
+
     this.db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
       .run(String(CURRENT_SCHEMA_VERSION));
   }
@@ -155,12 +160,12 @@ export class DatabaseManager {
     ).run(chatId, chatId, enabled ? 1 : 0);
   }
 
-  addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status'], invitedBy?: string, invitedByName?: string) {
+  addParticipant(eventId: number | bigint, userId: string, userName: string, status: Participant['status'], invitedBy?: string, invitedByName?: string, joinSource?: 'join' | 'waitlist') {
     const stmt = this.db.prepare(`
-      INSERT INTO participants (event_id, user_id, user_name, status, invited_by, invited_by_name)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO participants (event_id, user_id, user_name, status, invited_by, invited_by_name, join_source)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    return stmt.run(eventId, userId, userName, status, invitedBy, invitedByName);
+    return stmt.run(eventId, userId, userName, status, invitedBy ?? null, invitedByName ?? null, joinSource ?? null);
   }
 
   getParticipants(eventId: number | bigint): Participant[] {
@@ -193,6 +198,10 @@ export class DatabaseManager {
 
   getNextInWaitlist(eventId: number | bigint): Participant | undefined {
     return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' ORDER BY joined_at ASC LIMIT 1`).get(eventId) as Participant | undefined;
+  }
+
+  getAutoPromotableWaitlist(eventId: number | bigint): Participant[] {
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC`).all(eventId) as Participant[];
   }
 
   clearDatabase() {

@@ -82,6 +82,9 @@ interface MessageTemplates {
   remindersOff: () => string;
   reminderMessage: (title: string, available: number, total: number, countdown: string) => string;
 
+  // Resize promotion
+  bulkPromoted: (names: string, title: string) => string;
+
   // Help
   helpMessage: () => string;
 }
@@ -142,6 +145,7 @@ const messages: Record<Locale, MessageTemplates> = {
     remindersOff: () => '🔕 Daily reminders disabled.',
     reminderMessage: (title, available, total, countdown) =>
       `🔔 *Reminder: "${title}"*\nSlots available: ${available}/${total}\n⏱ ${countdown} to go!\nUse !join to sign up.`,
+    bulkPromoted: (names, title) => `🎉 The following people have been automatically promoted to "${title}": ${names}`,
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
       `*!create "Title" <slots> [date time TZ] [--close-and-group Xh]*  — Create an event (admin only)\n` +
@@ -214,6 +218,7 @@ const messages: Record<Locale, MessageTemplates> = {
     remindersOff: () => '🔕 Recordatorios diarios desactivados.',
     reminderMessage: (title, available, total, countdown) =>
       `🔔 *Recordatorio: "${title}"*\nPlazas disponibles: ${available}/${total}\n⏱ ¡Faltan ${countdown}!\nUsa !unirse para apuntarte.`,
+    bulkPromoted: (names, title) => `🎉 Las siguientes personas han sido promovidas automáticamente a "${title}": ${names}`,
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
       `*!crear "Título" <plazas> [fecha hora TZ] [--close-and-group Xh]*  — Crear un evento (solo admins)\n` +

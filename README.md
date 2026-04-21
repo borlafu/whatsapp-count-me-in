@@ -10,6 +10,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - **Guest invitations**: Invite external guests who are not in the WhatsApp group.
 - **Waitlist Support**: Automatically manage waitlists when an event is full.
 - **Automatic Promotion**: When someone leaves, the first person on the waitlist is notified to confirm their spot.
+- **Smart Resize Promotion**: When an event is upsized with `!resize`, participants who ended up on the waitlist because the event was full (via `!join`) are automatically promoted to the participant list in FIFO order. Participants who explicitly joined the waitlist via `!waitlist` are not auto-promoted.
 - **Indexed Removal**: Remove participants or guests by their number in the status list.
 - **Active State**: Only one active event can be managed per group at a time.
 - **Event Scheduling**: Optionally set a date/time (with timezone) for an event. Shows a live countdown in `!status`.
@@ -23,7 +24,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - `!reschedule YYYY-MM-DD HH:MM Timezone [--close-and-group Xh]`: Update the date/time of the active event (Admins only).
 - `!groups [size]`: Manually close registrations and generate groups immediately (Admins only). The `size` (default 4) determines the number of participants per group.
 - `!cancel`: Deactivate the current active event (Admins only).
-- `!resize <slots>`: Update the maximum slots for the active event (Admins only). If the new limit is lower than the current participant count, the last-joined participants are moved to the front of the waitlist.
+- `!resize <slots>`: Update the maximum slots for the active event (Admins only). If the new limit is lower than the current participant count, the last-joined participants are moved to the front of the waitlist. If the new limit is higher, participants who were waitlisted because the event was full (joined via `!join`) are automatically promoted in FIFO order.
 - `!rename "New Title"`: Rename the active event (Admins only).
 - `!reminders on|off`: Enable or disable daily reminders at 09:00 UTC for the active timed event (Admins only).
 - `!join` or `!waitlist`: Sign up for the event or join the waitlist.

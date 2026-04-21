@@ -21,6 +21,7 @@ export interface ServiceResult {
     userName: string;
     eventTitle: string;
   };
+  promotions?: Array<{ userId: string; userName: string }>;
   data?: StatusData;
 }
 
@@ -80,7 +81,7 @@ export class EventService {
     const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
 
     if (!forceWaitlist && joinedCount < event.slots) {
-      this.db.addParticipant(event.id, userId, userName, 'joined');
+      this.db.addParticipant(event.id, userId, userName, 'joined', undefined, undefined, 'join');
       return {
         success: true,
         messageKey: 'joined',
@@ -89,7 +90,7 @@ export class EventService {
         showStatus: true
       };
     } else if (event.waitlist_enabled) {
-      this.db.addParticipant(event.id, userId, userName, 'waitlisted');
+      this.db.addParticipant(event.id, userId, userName, 'waitlisted', undefined, undefined, forceWaitlist ? 'waitlist' : 'join');
       return {
         success: true,
         messageKey: 'joinedWaitlist',
@@ -220,13 +221,35 @@ export class EventService {
     const joined = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion');
 
     if (newSlots < joined.length) {
+      // Downsize: move last-joined participants to waitlist (in reverse order so earliest-demoted ends up first in waitlist)
       const toMove = joined.slice(newSlots).reverse();
       for (const p of toMove) {
         this.db.updateParticipantStatus(event.id, p.user_id, 'waitlisted');
       }
+      this.db.updateEventSlots(event.id, newSlots);
+      return { success: true, messageKey: 'eventResized', params: [event.title, newSlots], showStatus: true };
     }
 
     this.db.updateEventSlots(event.id, newSlots);
+
+    // Upsize: auto-promote eligible waitlisters (join_source = 'join') up to the new available slots
+    const availableSlots = newSlots - joined.length;
+    if (availableSlots > 0) {
+      const promotable = this.db.getAutoPromotableWaitlist(event.id).slice(0, availableSlots);
+      for (const p of promotable) {
+        this.db.updateParticipantStatus(event.id, p.user_id, 'joined');
+      }
+      if (promotable.length > 0) {
+        return {
+          success: true,
+          messageKey: 'eventResized',
+          params: [event.title, newSlots],
+          showStatus: true,
+          promotions: promotable.map(p => ({ userId: p.user_id, userName: p.user_name }))
+        };
+      }
+    }
+
     return { success: true, messageKey: 'eventResized', params: [event.title, newSlots], showStatus: true };
   }
 
