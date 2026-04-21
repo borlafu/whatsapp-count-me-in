@@ -268,6 +268,15 @@ export class CommandHandler {
     }
     const result = this.eventService.resizeEvent(chatId, newSlots);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+    if (result.promotions && result.promotions.length > 0) {
+      const mentions = result.promotions.map(p => p.userId);
+      const names = result.promotions.map(p => `@${p.userId.split('@')[0]}`).join(', ');
+      const event = this.db.getActiveEvent(chatId);
+      await sock.sendMessage(chatId, {
+        text: t(locale, 'bulkPromoted', names, event?.title ?? ''),
+        mentions
+      });
+    }
     if (result.showStatus) await this.handleStatus(msg, chatId, sock, locale);
   }
 

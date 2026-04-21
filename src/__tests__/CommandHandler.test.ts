@@ -180,6 +180,73 @@ describe('CommandHandler', () => {
       expect(db.getParticipants(event.id).filter(p => p.status === 'joined').length).toBe(1);
       expect(db.getParticipants(event.id).filter(p => p.status === 'waitlisted').length).toBe(2);
     });
+
+    it('should auto-promote !join waitlisters when slots increase', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'U1'); // fills the slot
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'U2'); // goes to waitlist via !join
+      service.joinEvent(chatId, 'u3@s.whatsapp.net', 'U3'); // goes to waitlist via !join
+
+      await handler.handleCommand(createMockMsg('!resize 3', true, adminId), mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      expect(participants.filter(p => p.status === 'joined').length).toBe(3);
+      expect(participants.filter(p => p.status === 'waitlisted').length).toBe(0);
+      // Should send a bulk promotion message
+      const calls = mockSock.sendMessage.mock.calls.map((c: any) => c[1].text as string);
+      expect(calls.some(t => t && t.includes('promoted'))).toBe(true);
+    });
+
+    it('should NOT auto-promote !waitlist waitlisters when slots increase', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'U1'); // fills the slot
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'U2', true); // explicit !waitlist
+
+      await handler.handleCommand(createMockMsg('!resize 2', true, adminId), mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      expect(participants.filter(p => p.status === 'joined').length).toBe(1);
+      expect(participants.filter(p => p.status === 'waitlisted').length).toBe(1);
+      // No bulk promotion message
+      const calls = mockSock.sendMessage.mock.calls.map((c: any) => c[1].text as string);
+      expect(calls.some(t => t && t.includes('promoted'))).toBe(false);
+    });
+
+    it('should only promote up to the number of new available slots', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'U1');
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'U2'); // waitlist via !join
+      service.joinEvent(chatId, 'u3@s.whatsapp.net', 'U3'); // waitlist via !join
+
+      await handler.handleCommand(createMockMsg('!resize 2', true, adminId), mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      expect(participants.filter(p => p.status === 'joined').length).toBe(2);
+      expect(participants.filter(p => p.status === 'waitlisted').length).toBe(1);
+    });
+
+    it('should preserve FIFO order when promoting from waitlist', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, 'u1@s.whatsapp.net', 'U1');
+      service.joinEvent(chatId, 'u2@s.whatsapp.net', 'U2'); // first in waitlist
+      service.joinEvent(chatId, 'u3@s.whatsapp.net', 'U3'); // second in waitlist
+
+      await handler.handleCommand(createMockMsg('!resize 2', true, adminId), mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      const promoted = participants.find(p => p.user_id === 'u2@s.whatsapp.net');
+      const stillWaiting = participants.find(p => p.user_id === 'u3@s.whatsapp.net');
+      expect(promoted?.status).toBe('joined');
+      expect(stillWaiting?.status).toBe('waitlisted');
+    });
   });
 
   describe('!invite', () => {
