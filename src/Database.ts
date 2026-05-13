@@ -197,7 +197,7 @@ export class DatabaseManager {
   }
 
   getNextInWaitlist(eventId: number | bigint): Participant | undefined {
-    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' ORDER BY joined_at ASC LIMIT 1`).get(eventId) as Participant | undefined;
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC LIMIT 1`).get(eventId) as Participant | undefined;
   }
 
   getAutoPromotableWaitlist(eventId: number | bigint): Participant[] {
