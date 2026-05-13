@@ -54,12 +54,22 @@ describe('EventService', () => {
     it('should promote the first person on the waitlist when someone leaves', () => {
       service.createEvent(chatId, 'Test Event', 1, adminId);
       service.joinEvent(chatId, user1, 'User One');
-      service.joinEvent(chatId, user2, 'User Two'); // Waitlisted
+      service.joinEvent(chatId, user2, 'User Two'); // Waitlisted via !join
 
       const result = service.leaveEvent(chatId, user1);
       expect(result.success).toBe(true);
       expect((result as any).promotion).toBeDefined();
       expect((result as any).promotion.userId).toBe(user2);
+    });
+
+    it('should NOT auto-promote a user who explicitly used !waitlist when someone leaves', () => {
+      service.createEvent(chatId, 'Test Event', 1, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two', true); // forceWaitlist = !waitlist command
+
+      const result = service.leaveEvent(chatId, user1);
+      expect(result.success).toBe(true);
+      expect((result as any).promotion).toBeUndefined();
     });
   });
 
