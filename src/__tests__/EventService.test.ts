@@ -205,6 +205,76 @@ describe('EventService', () => {
     });
   });
 
+  describe('post-lock flow', () => {
+    it('should allow pending_promotion user to confirm after lock', () => {
+      service.createEvent(chatId, 'Test Event', 1, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+      db.setGroupsTriggered(event.id);
+      service.leaveEvent(chatId, user1);
+      const result = service.joinEvent(chatId, user2, 'User Two');
+      expect(result.success).toBe(true);
+      expect(result.messageKey).toBe('confirmedSpot');
+      expect(result.groupsUpdated).toBe(true);
+    });
+
+    it('should still block new joins after lock', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      service.joinEvent(chatId, user1, 'User One');
+      db.setGroupsTriggered(event.id);
+      const result = service.joinEvent(chatId, user2, 'User Two');
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('registrationsClosed');
+    });
+
+    it('should block leave on locked event when no waitlist', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      service.joinEvent(chatId, user1, 'User One');
+      db.setGroupsTriggered(event.id);
+      const result = service.leaveEvent(chatId, user1);
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('leaveLockedNoWaitlist');
+    });
+
+    it('should allow leave on locked event when waitlist has someone', () => {
+      service.createEvent(chatId, 'Test Event', 1, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+      db.setGroupsTriggered(event.id);
+      const result = service.leaveEvent(chatId, user1);
+      expect(result.success).toBe(true);
+      expect(result.promotion).toBeDefined();
+      expect(result.promotion!.userId).toBe(user2);
+    });
+
+    it('should allow leave on non-locked event even with no waitlist', () => {
+      service.createEvent(chatId, 'Test Event', 2, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      const result = service.leaveEvent(chatId, user1);
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow pending_promotion user to decline (!leave) after lock and promote next', () => {
+      const user3 = 'user3@s.whatsapp.net';
+      service.createEvent(chatId, 'Test Event', 1, adminId);
+      const event = db.getActiveEvent(chatId)!;
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+      service.joinEvent(chatId, user3, 'User Three');
+      db.setGroupsTriggered(event.id);
+      service.leaveEvent(chatId, user1);           // promotes user2 to pending_promotion
+      const result = service.leaveEvent(chatId, user2); // user2 declines
+      expect(result.success).toBe(true);
+      const participants = db.getParticipants(event.id);
+      expect(participants.find(p => p.user_id === user2)).toBeUndefined(); // withdrawn
+      expect(participants.find(p => p.user_id === user3)?.status).toBe('pending_promotion');
+    });
+  });
+
   describe('Duplicate Participant Bug - Leave/Rejoin/Promote Scenarios', () => {
     it('should not create duplicate participants when user leaves, rejoins, and gets promoted', () => {
       // Create event with 1 slot

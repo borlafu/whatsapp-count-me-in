@@ -27,6 +27,7 @@ interface MessageTemplates {
 
   // Leave
   notSignedUp: () => string;
+  leaveLockedNoWaitlist: () => string;
   withdrawn: (mention: string, title: string) => string;
   guestWithdrawn: (guestName: string, title: string, inviterName: string) => string;
   notAuthorizedToLeave: () => string;
@@ -108,6 +109,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventFullNoWaitlist: () => 'Sorry, the event is full and waitlist is disabled.',
     registrationsClosed: () => 'Registrations are closed for this event.',
     notSignedUp: () => 'You are not signed up for this event.',
+    leaveLockedNoWaitlist: () => "You can't leave because there's no one on the waitlist to take your spot.",
     withdrawn: (mention, title) => `❌ @${mention}, you have withdrawn from "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (inviter: ${inviterName}) has been withdrawn from "${title}".`,
     notAuthorizedToLeave: () => 'You can only remove yourself or your own guests.',
@@ -181,6 +183,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventFullNoWaitlist: () => 'Lo sentimos, el evento está lleno y la lista de espera está desactivada.',
     registrationsClosed: () => 'Las inscripciones para este evento están cerradas.',
     notSignedUp: () => 'No estás apuntado/a a este evento.',
+    leaveLockedNoWaitlist: () => 'No puedes salir porque no hay nadie en la lista de espera que pueda ocupar tu plaza.',
     withdrawn: (mention, title) => `❌ @${mention}, te has retirado de "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (invitante: ${inviterName}) ha sido retirado/a de "${title}".`,
     notAuthorizedToLeave: () => 'Solo puedes retirarte a ti mismo o a tus propios invitados.',

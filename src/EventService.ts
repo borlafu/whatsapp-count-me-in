@@ -16,6 +16,7 @@ export interface ServiceResult {
   params?: any[];
   mentions?: string[];
   showStatus?: boolean;
+  groupsUpdated?: boolean;
   promotion?: {
     userId: string;
     userName: string;
@@ -55,10 +56,6 @@ export class EventService {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
 
-    if (event.groups_triggered) {
-      return { success: false, messageKey: 'registrationsClosed' };
-    }
-
     const existing = this.db.getParticipant(event.id, userId);
     if (existing) {
       if (existing.status === 'pending_promotion') {
@@ -68,13 +65,18 @@ export class EventService {
           messageKey: 'confirmedSpot',
           params: [userId.split('@')[0], event.title],
           mentions: [userId],
-          showStatus: true
+          showStatus: true,
+          groupsUpdated: !!event.groups_triggered
         };
       }
       return {
         success: false,
         messageKey: existing.status === 'joined' ? 'alreadyJoined' : 'alreadyWaitlisted'
       };
+    }
+
+    if (event.groups_triggered) {
+      return { success: false, messageKey: 'registrationsClosed' };
     }
 
     const participants = this.db.getParticipants(event.id);
@@ -169,6 +171,10 @@ export class EventService {
   }
 
   private performWithdrawal(event: any, participant: Participant, requesterId?: string): ServiceResult {
+    if (event.groups_triggered && !this.db.getNextInWaitlist(event.id)) {
+      return { success: false, messageKey: 'leaveLockedNoWaitlist' };
+    }
+
     const oldStatus = participant.status;
     this.db.withdrawParticipant(event.id, participant.user_id);
 
