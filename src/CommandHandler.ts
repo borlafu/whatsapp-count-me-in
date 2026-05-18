@@ -198,6 +198,15 @@ export class CommandHandler {
     } else {
       await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
     }
+
+    if (result.groupsUpdated) {
+      const event = this.db.getActiveEvent(chatId);
+      if (event) {
+        const groups = this.eventService.makeGroups(event.id, 4);
+        const text = formatGroups(groups, 4, locale, t);
+        if (text) await this.safeReply(msg, chatId, sock, text);
+      }
+    }
   }
 
   private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], sock: WASocket, locale: Locale) {
