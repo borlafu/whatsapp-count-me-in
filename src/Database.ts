@@ -177,11 +177,11 @@ export class DatabaseManager {
   }
 
   updateParticipantStatus(eventId: number | bigint, userId: string, status: Participant['status']) {
-    return this.db.prepare(`UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ?`).run(status, eventId, userId);
+    return this.db.prepare(`UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`).run(status, eventId, userId);
   }
 
   withdrawParticipant(eventId: number | bigint, userId: string) {
-    return this.db.prepare(`UPDATE participants SET status = 'withdrawn' WHERE event_id = ? AND user_id = ?`).run(eventId, userId);
+    return this.db.prepare(`UPDATE participants SET status = 'withdrawn' WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`).run(eventId, userId);
   }
 
   cancelEvent(eventId: number | bigint) {
