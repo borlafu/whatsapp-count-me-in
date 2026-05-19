@@ -1,5 +1,5 @@
 # ==== Build Stage ====
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 # ==== Production Stage ====
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Use tini to manage PID 1 so Ctrl+C propagates gracefully
 RUN apk add --no-cache tini
