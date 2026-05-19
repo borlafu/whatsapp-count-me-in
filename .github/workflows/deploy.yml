@@ -48,7 +48,7 @@ jobs:
             nvm install
             nvm use
             corepack enable
-            pnpm install --frozen-lockfile
+            CI=true pnpm install --frozen-lockfile
             pnpm run build
             pm2 reload ecosystem.config.cjs --update-env
 
