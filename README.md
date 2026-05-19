@@ -6,6 +6,7 @@
 A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in groups.
 
 ## Features
+
 - **Group Admin ONLY**: Only group admins can create new events.
 - **Guest invitations**: Invite external guests who are not in the WhatsApp group.
 - **Waitlist Support**: Automatically manage waitlists when an event is full.
@@ -20,6 +21,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - **Low Profile Engine**: Specifically designed to run in environments with 1GB RAM or less, consuming < 100MB of RAM.
 
 ## Commands
+
 - `!create "Event Title" Slots [YYYY-MM-DD HH:MM Timezone] [--close-and-group Xh]`: Create a new event (Admins only). Supports both standard (`"`) and smart (`“ ”`) quotes. Optionally set a date/time in the organizer's timezone (e.g. `Europe/Madrid`). The `--close-and-group` flag closes registrations and auto-posts groups X hours/minutes before the event (e.g. `1h`, `30m`, `1h30m`).
 - `!reschedule YYYY-MM-DD HH:MM Timezone [--close-and-group Xh]`: Update the date/time of the active event (Admins only).
 - `!groups [size]`: Manually close registrations and generate groups immediately (Admins only). The `size` (default 4) determines the number of participants per group.
@@ -37,13 +39,15 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 ## Running Locally
 
 1. Install dependencies:
+
    ```bash
-   npm install
+   pnpm install
    ```
 
 2. Start the bot in development mode (TypeScript runs dynamically via `tsx`):
+
    ```bash
-   npm start
+   pnpm start
    ```
 
 3. Scan the QR code displayed in your terminal using WhatsApp (Menu > Linked Devices).
@@ -54,10 +58,11 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 For lowest CPU and memory footprint, pre-compile the TypeScript source codes to JavaScript before deployment.
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 Then, you can start the application natively:
+
 ```bash
 node dist/index.js
 ```
@@ -67,15 +72,18 @@ node dist/index.js
 The application runs seamlessly either natively (recommended for the absolute lowest RAM usage) or securely packaged inside a Docker container.
 
 ### Using Docker (Highly Recommended)
+
 We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 
 1. Create a persistent folder to avoid credential loss, and a database file:
+
    ```bash
    mkdir .auth_info_baileys
    touch events.db
    ```
 
 2. Run the container mapping the local volumes into the app configuration hooks:
+
    ```bash
    docker run -it --rm \
      -v $(pwd)/.auth_info_baileys:/app/.auth_info_baileys:z \
@@ -88,17 +96,21 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 ### Native via PM2
 
 1. Build the app as described previously.
-2. Install PM2 process monitor globally (`npm install -g pm2`).
+2. Install PM2 process monitor globally (`pnpm add -g pm2`).
 3. Limit the application's aggressive memory consumption dynamically and start the cluster:
+
    ```bash
    pm2 start ecosystem.config.cjs
    ```
+
 4. Follow logs to scan the QR code using:
+
    ```bash
    pm2 logs whatsapp-count-me-in
    ```
 
 ## Technology
+
 - [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys)
 - [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)
 - [pm2](https://github.com/Unitech/pm2)
