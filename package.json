@@ -10,8 +10,9 @@
     "test": "vitest run"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
+  "packageManager": "pnpm@10.33.4",
   "keywords": [],
   "author": "Borja Lafuente",
   "license": "MIT",
@@ -32,5 +33,14 @@
   },
   "overrides": {
     "protobufjs": "^7.5.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@whiskeysockets/baileys",
+      "better-sqlite3",
+      "esbuild",
+      "protobufjs",
+      "sharp"
+    ]
   }
 }
