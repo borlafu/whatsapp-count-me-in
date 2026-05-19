@@ -9,7 +9,7 @@ RUN apk add --no-cache python3 make g++
 RUN corepack enable
 
 # Install all dependencies (including dev for TypeScript build)
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy source and build
