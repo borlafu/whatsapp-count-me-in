@@ -37,11 +37,19 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
           script: |
+            if [ ! -d "$HOME/.nvm" ]; then
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+            fi
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             cd ~/whatsapp-count-me-in
             git fetch origin main
             git reset --hard origin/main
-            npm ci
-            npm run build
+            nvm install
+            nvm use
+            corepack enable
+            pnpm install --frozen-lockfile
+            pnpm run build
             pm2 reload ecosystem.config.cjs --update-env
 
       - name: Update Deployment Status
