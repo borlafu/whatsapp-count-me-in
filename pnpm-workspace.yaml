@@ -2,8 +2,8 @@ auditConfig:
   ignoreCves: []
 
 allowBuilds:
-  '@whiskeysockets/baileys': false
+  '@whiskeysockets/baileys': true
   better-sqlite3: true
-  esbuild: false
-  protobufjs: false
-  sharp: false
+  esbuild: true
+  protobufjs: true
+  sharp: true
