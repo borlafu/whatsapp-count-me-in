@@ -9,7 +9,7 @@ export interface WhatsAppEvent {
   slots: number;
   waitlist_enabled: number;
   created_by: string;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'active' | 'completed' | 'cancelled' | 'concluded';
   created_at: string;
   event_at?: string;
   timezone?: string;
@@ -186,6 +186,10 @@ export class DatabaseManager {
 
   cancelEvent(eventId: number | bigint) {
     return this.db.prepare(`UPDATE events SET status = 'cancelled' WHERE id = ?`).run(eventId);
+  }
+
+  concludeEvent(eventId: number | bigint) {
+    return this.db.prepare(`UPDATE events SET status = 'concluded' WHERE id = ?`).run(eventId);
   }
 
   updateEventSlots(eventId: number | bigint, slots: number) {

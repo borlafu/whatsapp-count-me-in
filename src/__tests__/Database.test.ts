@@ -4,6 +4,19 @@ import { DatabaseManager } from '../Database.js';
 import fs from 'fs';
 import path from 'path';
 
+describe('DatabaseManager concludeEvent', () => {
+  it('should mark event as concluded and remove it from active events', () => {
+    const db = new DatabaseManager(':memory:');
+    const chatId = 'chat@g.us';
+    db.createEvent(chatId, 'Test Event', 10, true, 'admin@s.whatsapp.net');
+    const event = db.getActiveEvent(chatId)!;
+    expect(event).toBeDefined();
+    db.concludeEvent(event.id);
+    expect(db.getActiveEvent(chatId)).toBeUndefined();
+    db.close();
+  });
+});
+
 describe('DatabaseManager Migration', () => {
   const testDbPath = path.join(process.cwd(), 'test-migration.db');
 

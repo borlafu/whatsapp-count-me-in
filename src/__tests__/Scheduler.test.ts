@@ -29,8 +29,8 @@ describe('Scheduler', () => {
     return scheduler;
   }
 
-  describe('auto-cancel', () => {
-    it('should cancel an event whose scheduled time has passed', () => {
+  describe('auto-conclude', () => {
+    it('should conclude an event whose scheduled time has passed', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
       eventService.createEvent(chatId, 'Past Event', 10, adminId, eventAt, 'UTC');
 
@@ -46,7 +46,7 @@ describe('Scheduler', () => {
       );
       expect(sendMessage).toHaveBeenCalledWith(
         chatId,
-        expect.stringContaining('cancelled')
+        expect.stringContaining('concluded')
       );
       expect(db.getActiveEvent(chatId)).toBeUndefined();
     });

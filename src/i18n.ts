@@ -45,6 +45,7 @@ interface MessageTemplates {
   // Cancel
   noActiveEventCancel: () => string;
   eventCancelled: (title: string) => string;
+  eventConcluded: (title: string) => string;
 
   // Status
   noActiveEventStatus: () => string;
@@ -116,6 +117,7 @@ const messages: Record<Locale, MessageTemplates> = {
     leaveIndexInvalid: () => 'Invalid number. Please check the current !status.',
     noActiveEventCancel: () => 'No active event to cancel.',
     eventCancelled: (title) => `🛑 Event "${title}" has been cancelled.`,
+    eventConcluded: (title) => `🎉 Event "${title}" has concluded. Thanks for joining!`,
     resizeUsage: () => 'Usage: !resize <new_slots>',
     resizeInvalidSlots: () => 'Slots must be a positive number.',
     eventResized: (title, slots) => `✅ Event "${title}" updated to ${slots} slot(s).`,
@@ -190,6 +192,7 @@ const messages: Record<Locale, MessageTemplates> = {
     leaveIndexInvalid: () => 'Número inválido. Por favor revisa el !estado actual.',
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
     eventCancelled: (title) => `🛑 El evento "${title}" ha sido cancelado.`,
+    eventConcluded: (title) => `🎉 El evento "${title}" ha concluido. ¡Gracias por participar!`,
     resizeUsage: () => 'Uso: !resize <nuevas_plazas>',
     resizeInvalidSlots: () => 'Las plazas deben ser un número positivo.',
     eventResized: (title, slots) => `✅ El evento "${title}" ha sido actualizado a ${slots} plaza(s).`,

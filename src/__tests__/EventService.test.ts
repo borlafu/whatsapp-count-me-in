@@ -416,4 +416,21 @@ describe('EventService', () => {
       expect(userIds.length).toBe(uniqueUserIds.size);
     });
   });
+
+  describe('concludeEvent', () => {
+    it('should conclude an active event and return eventConcluded', () => {
+      service.createEvent(chatId, 'Padel', 10, adminId);
+      const result = service.concludeEvent(chatId);
+      expect(result.success).toBe(true);
+      expect(result.messageKey).toBe('eventConcluded');
+      expect(result.params).toEqual(['Padel']);
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+    });
+
+    it('should return noActiveEventCancel when no active event', () => {
+      const result = service.concludeEvent(chatId);
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('noActiveEventCancel');
+    });
+  });
 });

@@ -40,9 +40,9 @@ export class Scheduler {
       const msUntilEvent = Date.parse(event.event_at!) - now;
 
       if (msUntilEvent <= 0) {
-        // Auto-cancel
-        this.eventService.cancelEvent(event.chat_id);
-        this.sendMessage(event.chat_id, t(locale, 'eventCancelled', event.title)).catch(console.error);
+        // Auto-conclude
+        this.eventService.concludeEvent(event.chat_id);
+        this.sendMessage(event.chat_id, t(locale, 'eventConcluded', event.title)).catch(console.error);
         continue;
       }
 

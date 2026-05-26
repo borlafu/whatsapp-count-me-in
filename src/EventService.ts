@@ -267,6 +267,14 @@ export class EventService {
     return { success: true, messageKey: 'eventCancelled', params: [event.title] };
   }
 
+  concludeEvent(chatId: string): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEventCancel' };
+
+    this.db.concludeEvent(event.id);
+    return { success: true, messageKey: 'eventConcluded', params: [event.title] };
+  }
+
   getStatus(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEventStatus' };
