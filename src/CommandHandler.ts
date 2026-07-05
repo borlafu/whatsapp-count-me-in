@@ -188,7 +188,11 @@ export class CommandHandler {
   }
 
   private async handleJoin(msg: WAMessage, chatId: string, userId: string, userName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
-    const result = this.eventService.joinEvent(chatId, userId, userName, forceWaitlist);
+    await this.executeJoin(msg, chatId, userId, userName, sock, locale, forceWaitlist);
+  }
+
+  private async executeJoin(msg: WAMessage, chatId: string, targetUserId: string, targetUserName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
+    const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist);
     if (!result.success && result.messageKey === 'noActiveEvent') {
       return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
     }
@@ -210,6 +214,21 @@ export class CommandHandler {
   }
 
   private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+
+    const mentionedJids: string[] = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
+
+    if (mentionedJids.length > 0) {
+      for (const rawJid of mentionedJids) {
+        const memberJid = jidNormalizedUser(rawJid);
+        const memberName = memberJid.split('@')[0] ?? rawJid;
+        await this.executeJoin(msg, chatId, memberJid, memberName, sock, locale, false);
+      }
+      return;
+    }
+
     const guestName = (args[0] ?? '').trim().substring(0, 50);
     if (!guestName) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'inviteUsage'));

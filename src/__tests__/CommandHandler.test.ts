@@ -35,6 +35,23 @@ describe('CommandHandler', () => {
     pushName: 'Test User'
   });
 
+  const createMentionMsg = (text: string, mentionedJids: string[], participant = adminId): any => ({
+    key: {
+      remoteJid: chatId,
+      fromMe: false,
+      participant
+    },
+    message: {
+      extendedTextMessage: {
+        text,
+        contextInfo: {
+          mentionedJid: mentionedJids
+        }
+      }
+    },
+    pushName: 'Admin User'
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     db = new DatabaseManager(':memory:');
@@ -250,28 +267,42 @@ describe('CommandHandler', () => {
   });
 
   describe('!invite', () => {
-    it('should allow a user to invite a guest', async () => {
+    it('should allow admin to invite a guest', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
       service.createEvent(chatId, 'Party', 5, adminId);
-      const msg = createMockMsg('!invite "Guest Name"');
+      const msg = createMockMsg('!invite "Guest Name"', false, adminId);
       await handler.handleCommand(msg, mockSock);
 
       const event = db.getActiveEvent(chatId)!;
       const participants = db.getParticipants(event.id);
       const guest = participants.find(p => p.user_name === 'Guest Name')!;
-      
+
       expect(guest).toBeDefined();
       expect(guest.user_id).toContain('guest:');
-      expect(guest.invited_by).toBe(userId);
+      expect(guest.invited_by).toBe(adminId);
       expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
         text: expect.stringContaining('Guest Name')
       }), expect.anything());
     });
 
-    it('should format guest names correctly in status', async () => {
+    it('should deny non-admin from inviting a guest', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
       service.createEvent(chatId, 'Party', 5, adminId);
-      await handler.handleCommand(createMockMsg('!invite "Juan"'), mockSock);
-      
-      // Clear mock to check status call
+      const msg = createMockMsg('!invite "Guest Name"');
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).length).toBe(0);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('admins')
+      }), expect.anything());
+    });
+
+    it('should format guest names correctly in status', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      await handler.handleCommand(createMockMsg('!invite "Juan"', false, adminId), mockSock);
+
       mockSock.sendMessage.mockClear();
       await handler.handleCommand(createMockMsg('!status'), mockSock);
 
@@ -281,15 +312,88 @@ describe('CommandHandler', () => {
     });
 
     it('should add guest to waitlist if full', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
       service.createEvent(chatId, 'Party', 1, adminId);
       service.joinEvent(chatId, adminId, 'Admin');
-      
-      const msg = createMockMsg('!invite "Guest"');
+
+      const msg = createMockMsg('!invite "Guest"', false, adminId);
       await handler.handleCommand(msg, mockSock);
 
       const event = db.getActiveEvent(chatId)!;
       const guest = db.getParticipants(event.id).find(p => p.user_name === 'Guest')!;
       expect(guest.status).toBe('waitlisted');
+    });
+
+    it('should join mentioned member as regular participant when admin uses @mention', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      const memberJid = 'member@s.whatsapp.net';
+
+      const msg = createMentionMsg('!invite @member', [memberJid]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant).toBeDefined();
+      expect(participant!.status).toBe('joined');
+      expect(participant!.invited_by).toBeNull();
+    });
+
+    it('should join multiple mentioned members', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      const jid1 = 'member1@s.whatsapp.net';
+      const jid2 = 'member2@s.whatsapp.net';
+
+      const msg = createMentionMsg('!invite @member1 @member2', [jid1, jid2]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participants = db.getParticipants(event.id);
+      expect(participants.find(p => p.user_id === jid1)?.status).toBe('joined');
+      expect(participants.find(p => p.user_id === jid2)?.status).toBe('joined');
+    });
+
+    it('should block non-admin from using @mention invite', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      const memberJid = 'member@s.whatsapp.net';
+
+      const msg = createMentionMsg('!invite @member', [memberJid], userId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(db.getParticipants(event.id).length).toBe(0);
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('admins')
+      }), expect.anything());
+    });
+
+    it('should put mentioned member on waitlist when event is full', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, 'other@s.whatsapp.net', 'Other');
+      const memberJid = 'member@s.whatsapp.net';
+
+      const msg = createMentionMsg('!invite @member', [memberJid]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant?.status).toBe('waitlisted');
+    });
+
+    it('should fall through to guest path when no mentions present', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const msg = createMentionMsg('!invite "External"', [], adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const guest = db.getParticipants(event.id).find(p => p.user_name === 'External');
+      expect(guest).toBeDefined();
+      expect(guest!.user_id).toContain('guest:');
     });
   });
 
