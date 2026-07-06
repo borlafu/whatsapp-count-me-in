@@ -1,0 +1,300 @@
+# Instincts generated from https://github.com/borlafu/whatsapp-count-me-in
+# Generated: 2026-07-05T12:23:00.633Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: whatsapp-count-me-in-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, chore
+
+## Evidence
+
+- 2 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: admin-only invite with @mention support for group members, chore: add CLAUDE.md
+
+---
+id: whatsapp-count-me-in-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Commit Length
+
+## Action
+
+Keep commit messages concise (~42 characters)
+
+## Evidence
+
+- Average commit message length: 42 chars
+- Based on 2 commits
+
+---
+id: whatsapp-count-me-in-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Naming Files
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: PascalCase
+
+---
+id: whatsapp-count-me-in-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: whatsapp-count-me-in-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: whatsapp-count-me-in-instinct-file-naming
+trigger: "When creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct File Naming
+
+## Action
+
+Name the file using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.files: PascalCase
+
+---
+id: whatsapp-count-me-in-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: whatsapp-count-me-in-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class name
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: whatsapp-count-me-in-instinct-constant-naming
+trigger: "When declaring a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: whatsapp-count-me-in-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: whatsapp-count-me-in-instinct-export-style
+trigger: "When exporting code from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: whatsapp-count-me-in-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Test Location
+
+## Action
+
+Place test files either in __tests__ folders or mixed with source files
+
+## Evidence
+
+- Pattern in folderStructure.srcLayout: __tests__
+- Pattern in folderStructure.testLocation: mixed
+
+---
+id: whatsapp-count-me-in-instinct-git-commit-format
+trigger: "When making a git commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Git Commit Format
+
+## Action
+
+Format the commit message as <type>: <description>, where type is 'feat' or 'chore'
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Pattern in commits.prefixes: ['feat', 'chore']
+- Examples: 'feat: admin-only invite with @mention support for group members', 'chore: add CLAUDE.md'
+
+---
+id: whatsapp-count-me-in-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 42 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength: 42
+
+---
+id: whatsapp-count-me-in-instinct-error-handling
+trigger: "When handling errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: borlafu/whatsapp-count-me-in
+---
+
+# Whatsapp Count Me In Instinct Error Handling
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in errorHandling.style: try-catch
+

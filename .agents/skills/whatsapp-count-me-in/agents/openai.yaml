@@ -1,0 +1,6 @@
+interface:
+  display_name: "Whatsapp Count Me In"
+  short_description: "Repo-specific patterns and workflows for whatsapp-count-me-in"
+  default_prompt: "Use the whatsapp-count-me-in repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
