@@ -9,7 +9,8 @@ import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, for
 export class CommandHandler {
   constructor(
     private eventService: EventService,
-    private db: DatabaseManager
+    private db: DatabaseManager,
+    private contactNames: Map<string, string> = new Map()
   ) {}
 
   async handleCommand(msg: WAMessage, sock: WASocket) {
@@ -221,9 +222,17 @@ export class CommandHandler {
     const mentionedJids: string[] = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
 
     if (mentionedJids.length > 0) {
-      for (const rawJid of mentionedJids) {
-        const memberJid = jidNormalizedUser(rawJid);
-        const memberName = memberJid.split('@')[0] ?? rawJid;
+      const metadata = await sock.groupMetadata(chatId);
+      const msgText = msg.message?.extendedTextMessage?.text ?? '';
+      const isolateNames = [...msgText.matchAll(/⁨([^⁩]+)⁩/g)].map(m => m[1]!);
+
+      for (let i = 0; i < mentionedJids.length; i++) {
+        const memberJid = jidNormalizedUser(mentionedJids[i]!);
+        const participant = metadata.participants.find(p => p.id === memberJid);
+        const memberName = (participant as any)?.notify
+          ?? this.contactNames.get(memberJid)
+          ?? isolateNames[i]
+          ?? memberJid.split('@')[0];
         await this.executeJoin(msg, chatId, memberJid, memberName, sock, locale, false);
       }
       return;

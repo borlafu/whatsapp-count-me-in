@@ -324,10 +324,15 @@ describe('CommandHandler', () => {
       expect(guest.status).toBe('waitlisted');
     });
 
-    it('should join mentioned member as regular participant when admin uses @mention', async () => {
-      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
-      service.createEvent(chatId, 'Party', 5, adminId);
+    it('should use notify name from groupMetadata for mentioned member', async () => {
       const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberJid, notify: 'Alex Huercano' }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
 
       const msg = createMentionMsg('!invite @member', [memberJid]);
       await handler.handleCommand(msg, mockSock);
@@ -335,23 +340,70 @@ describe('CommandHandler', () => {
       const event = db.getActiveEvent(chatId)!;
       const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
       expect(participant).toBeDefined();
+      expect(participant!.user_name).toBe('Alex Huercano');
       expect(participant!.status).toBe('joined');
       expect(participant!.invited_by).toBeNull();
     });
 
-    it('should join multiple mentioned members', async () => {
-      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+    it('should fall back to contact store name when notify is absent', async () => {
+      const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberJid }
+        ]
+      });
       service.createEvent(chatId, 'Party', 5, adminId);
+
+      const contactNames = new Map<string, string>();
+      contactNames.set(memberJid, 'From Contacts');
+      const handlerWithContacts = new CommandHandler(service, db, contactNames);
+
+      const msg = createMentionMsg('!invite @member', [memberJid]);
+      await handlerWithContacts.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant!.user_name).toBe('From Contacts');
+    });
+
+    it('should fall back to isolate name when notify and contacts are absent', async () => {
+      const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberJid }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const msg = createMentionMsg('!invite ⁨María García⁩', [memberJid]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant!.user_name).toBe('María García');
+    });
+
+    it('should join multiple mentioned members using their names', async () => {
       const jid1 = 'member1@s.whatsapp.net';
       const jid2 = 'member2@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: jid1, notify: 'Alice' },
+          { id: jid2, notify: 'Bob' }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
 
       const msg = createMentionMsg('!invite @member1 @member2', [jid1, jid2]);
       await handler.handleCommand(msg, mockSock);
 
       const event = db.getActiveEvent(chatId)!;
       const participants = db.getParticipants(event.id);
-      expect(participants.find(p => p.user_id === jid1)?.status).toBe('joined');
-      expect(participants.find(p => p.user_id === jid2)?.status).toBe('joined');
+      expect(participants.find(p => p.user_id === jid1)?.user_name).toBe('Alice');
+      expect(participants.find(p => p.user_id === jid2)?.user_name).toBe('Bob');
     });
 
     it('should block non-admin from using @mention invite', async () => {

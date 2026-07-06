@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, type WAMessage } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser, type WAMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode';
 import { DatabaseManager } from './Database.js';
@@ -10,12 +10,13 @@ class WhatsAppBot {
   private db: DatabaseManager;
   private eventService: EventService;
   private commandHandler: CommandHandler;
+  private contactNames: Map<string, string> = new Map();
   private scheduler: Scheduler | null = null;
 
   constructor() {
     this.db = new DatabaseManager();
     this.eventService = new EventService(this.db);
-    this.commandHandler = new CommandHandler(this.eventService, this.db);
+    this.commandHandler = new CommandHandler(this.eventService, this.db, this.contactNames);
   }
 
   async start() {
@@ -31,6 +32,21 @@ class WhatsAppBot {
     });
 
     sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('contacts.upsert', (contacts) => {
+      for (const c of contacts) {
+        const id = jidNormalizedUser(c.id);
+        if (c.notify) this.contactNames.set(id, c.notify);
+      }
+    });
+
+    sock.ev.on('contacts.update', (updates) => {
+      for (const c of updates) {
+        if (c.id && c.notify) {
+          this.contactNames.set(jidNormalizedUser(c.id), c.notify);
+        }
+      }
+    });
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
