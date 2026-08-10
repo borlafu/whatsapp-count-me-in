@@ -116,6 +116,50 @@ describe('CommandHandler', () => {
         text: expect.stringContaining('Only group admins')
       }), expect.anything());
     });
+
+    describe('slots validation', () => {
+      beforeEach(() => {
+        mockSock.groupMetadata.mockResolvedValue({
+          participants: [{ id: adminId, admin: 'admin' }]
+        });
+      });
+
+      it.each([
+        ['non-numeric slots', '!create "My Party" abc'],
+        ['missing slots', '!create "My Party"'],
+        ['whitespace slots', '!create "My Party" " "'],
+        ['a flag in place of slots', '!create "My Party" --close-and-group'],
+      ])('rejects %s without writing to the database', async (_label, body) => {
+        const msg = createMockMsg(body, true, adminId);
+        await handler.handleCommand(msg, mockSock);
+
+        expect(db.getActiveEvent(chatId)).toBeUndefined();
+        expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+          text: expect.stringContaining('Usage')
+        }), expect.anything());
+      });
+
+      it('rejects trailing garbage rather than silently truncating it', async () => {
+        const msg = createMockMsg('!create "My Party" 12abc', true, adminId);
+        await handler.handleCommand(msg, mockSock);
+
+        expect(db.getActiveEvent(chatId)).toBeUndefined();
+      });
+
+      it('rejects fractional slots', async () => {
+        const msg = createMockMsg('!create "My Party" 2.5', true, adminId);
+        await handler.handleCommand(msg, mockSock);
+
+        expect(db.getActiveEvent(chatId)).toBeUndefined();
+      });
+
+      it('stores a valid slot count', async () => {
+        const msg = createMockMsg('!create "My Party" 10', true, adminId);
+        await handler.handleCommand(msg, mockSock);
+
+        expect(db.getActiveEvent(chatId)?.slots).toBe(10);
+      });
+    });
   });
 
   describe('!join', () => {

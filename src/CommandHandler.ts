@@ -4,7 +4,7 @@ import type { DatabaseManager } from './Database.js';
 import { t, type Locale } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
-import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, formatGroups } from './formatters.js';
+import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
 
 export class CommandHandler {
   constructor(
@@ -114,8 +114,8 @@ export class CommandHandler {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
     const title = (args[0] ?? '').trim().substring(0, 100);
-    const slots = parseInt(args[1] ?? '0');
-    if (!title || slots <= 0) {
+    const slots = parsePositiveInt(args[1]);
+    if (!title || slots === null) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'createUsage'));
     }
 
@@ -253,10 +253,10 @@ export class CommandHandler {
   }
 
   private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
-    const index = parseInt(args[0] ?? '');
+    const index = parsePositiveInt(args[0]);
     let result;
 
-    if (!isNaN(index) && index > 0) {
+    if (index !== null) {
       const isAdmin = await this.isAdmin(chatId, userId, sock);
       result = this.eventService.leaveByIndex(chatId, userId, isAdmin, index);
     } else {
@@ -299,8 +299,8 @@ export class CommandHandler {
     if (!(await this.isAdmin(chatId, userId, sock))) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
-    const newSlots = parseInt(args[0] ?? '');
-    if (!newSlots || newSlots <= 0) {
+    const newSlots = parsePositiveInt(args[0]);
+    if (newSlots === null) {
       return await this.safeReply(msg, chatId, sock, t(locale, 'resizeUsage'));
     }
     const result = this.eventService.resizeEvent(chatId, newSlots);
@@ -337,10 +337,11 @@ export class CommandHandler {
 
     let membersPerGroup = 4;
     if (args[0]) {
-      membersPerGroup = parseInt(args[0]);
-      if (isNaN(membersPerGroup) || membersPerGroup < 2) {
+      const parsed = parsePositiveInt(args[0]);
+      if (parsed === null || parsed < 2) {
         return await this.safeReply(msg, chatId, sock, t(locale, 'groupsInvalidSize'));
       }
+      membersPerGroup = parsed;
     }
 
     const groups = this.eventService.makeGroups(event.id, membersPerGroup);

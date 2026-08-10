@@ -1,5 +1,41 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown, parseOffsetToMinutes, formatEventDate, localToUtc } from '../formatters.js';
+import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc } from '../formatters.js';
+
+describe('parsePositiveInt', () => {
+  it('parses a plain positive integer', () => {
+    expect(parsePositiveInt('10')).toBe(10);
+  });
+
+  it('tolerates surrounding whitespace', () => {
+    expect(parsePositiveInt(' 7 ')).toBe(7);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+    ['letters', 'abc'],
+    ['zero', '0'],
+    ['a negative number', '-5'],
+    ['a fraction', '2.5'],
+    ['scientific notation', '1e3'],
+    ['a flag', '--close-and-group'],
+  ])('returns null for %s', (_label, input) => {
+    expect(parsePositiveInt(input)).toBeNull();
+  });
+
+  it('returns null for trailing garbage instead of truncating', () => {
+    expect(parsePositiveInt('12abc')).toBeNull();
+  });
+
+  it('returns null for hexadecimal instead of reading base 16', () => {
+    expect(parsePositiveInt('0x10')).toBeNull();
+  });
+
+  it('returns null beyond the safe integer range', () => {
+    expect(parsePositiveInt('9'.repeat(20))).toBeNull();
+  });
+});
 
 describe('formatCountdown', () => {
   it('should format days and hours', () => {
