@@ -35,13 +35,21 @@ jobs:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script_stop: true
           script: |
+            # `set -e` replaces the script_stop input, which was removed in
+            # ssh-action v1.2.1. Without it a failing command mid-script is
+            # ignored and the step still reports success, which would hide a
+            # partial deploy: dependencies swapped but never built or reloaded.
+            set -e
             if [ ! -d "$HOME/.nvm" ]; then
               curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
             fi
             export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+              echo "nvm.sh missing after install" >&2
+              exit 1
+            fi
+            \. "$NVM_DIR/nvm.sh"
             cd ~/whatsapp-count-me-in
             git fetch origin main
             git reset --hard origin/main
