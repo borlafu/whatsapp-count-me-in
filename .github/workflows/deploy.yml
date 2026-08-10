@@ -30,7 +30,7 @@ jobs:
 
       - name: Deploy to Oracle VM via SSH
         id: ssh
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: ${{ secrets.REMOTE_USER }}
