@@ -20,7 +20,8 @@
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "better-sqlite3": "^13.0.3",
     "pino": "^10.3.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -30,8 +31,5 @@
     "tsx": "^4.23.7",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
-  },
-  "overrides": {
-    "protobufjs": "^7.5.5"
   }
 }
