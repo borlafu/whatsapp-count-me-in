@@ -1,6 +1,11 @@
 auditConfig:
   ignoreCves: []
 
+# pnpm reads overrides from here, not from a top-level `overrides` key in
+# package.json (that field is npm's, and pnpm silently ignores it).
+overrides:
+  protobufjs: ^7.5.5
+
 allowBuilds:
   '@whiskeysockets/baileys': true
   # v13+ ships N-API prebuilt binaries, so no compile step is needed. The

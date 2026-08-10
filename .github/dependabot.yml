@@ -9,3 +9,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # Without this, action versions are never bumped. That is how the deploy
+  # workflow ended up warning on every run that actions/github-script@v7
+  # targets the deprecated Node.js 20 runtime.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
