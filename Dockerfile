@@ -1,5 +1,5 @@
 # ==== Build Stage ====
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN pnpm prune --prod
 RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.exec('CREATE TABLE t(a)');d.close();console.log('better-sqlite3 OK')"
 
 # ==== Production Stage ====
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Use tini to manage PID 1 so Ctrl+C propagates gracefully
 RUN apk add --no-cache tini
