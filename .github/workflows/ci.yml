@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # Enable corepack before setup-node so the pnpm cache lookup can resolve
       # the store path from the packageManager field in package.json.
