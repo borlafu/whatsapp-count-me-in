@@ -94,6 +94,19 @@ export function formatCountdown(msUntil: number): string {
   return `${mins}m`;
 }
 
+/**
+ * Parses a whole positive integer from user input. Returns null unless the
+ * entire string is digits, so `parseInt` quirks cannot leak through: "abc"
+ * would yield NaN, "12abc" would silently truncate to 12, and "0x10" would be
+ * read as hexadecimal.
+ */
+export function parsePositiveInt(s: string | undefined): number | null {
+  if (!s || !/^\d+$/.test(s.trim())) return null;
+  const value = Number(s.trim());
+  if (!Number.isSafeInteger(value) || value <= 0) return null;
+  return value;
+}
+
 /** Parses an offset string like "1h", "30m", "2h30m" into minutes. Returns null if invalid. */
 export function parseOffsetToMinutes(s: string): number | null {
   const match = s.match(/^(?:(\d+)h)?(?:(\d+)m)?$/i);
