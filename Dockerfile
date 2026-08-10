@@ -3,9 +3,9 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Install build tools for native modules (like better-sqlite3)
-RUN apk add --no-cache python3 make g++
-
+# No compiler toolchain is installed. The only native dependency,
+# better-sqlite3, ships a musl prebuild (linuxmusl-x64/arm64) from v13 onward,
+# and pnpm-workspace.yaml disables its implicit node-gyp build.
 RUN corepack enable
 
 # Install all dependencies (including dev for TypeScript build)
@@ -19,6 +19,10 @@ RUN pnpm run build
 
 # Remove development dependencies to lighten the final copy
 RUN pnpm prune --prod
+
+# Fail the build here rather than at runtime if the native module cannot load,
+# since nothing in this image can compile it as a fallback.
+RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.exec('CREATE TABLE t(a)');d.close();console.log('better-sqlite3 OK')"
 
 # ==== Production Stage ====
 FROM node:24-alpine
