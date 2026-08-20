@@ -63,6 +63,32 @@ describe('TelegramNotifier', () => {
     const body = init.body as URLSearchParams;
     expect(body.get('chat_id')).toBe('42');
     expect(body.get('text')).toContain('Body line');
+    // Markdown parsing would reject stack traces containing stray * or _.
+    expect(body.get('parse_mode')).toBeNull();
+  });
+
+  it('truncates a message that exceeds the Telegram limit', async () => {
+    const fetchFn = vi.fn(async () => okResponse());
+    const stackTrace = 'at Object.<anonymous> (/app/dist/index.js:1:1)\n'.repeat(200);
+
+    await new TelegramNotifier({ botToken: 'TOKEN', chatId: '42' }, fetchFn as unknown as typeof fetch)
+      .send({ subject: 'WhatsApp bot crashed', body: stackTrace });
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const text = (init.body as URLSearchParams).get('text')!;
+    expect(text.length).toBeLessThanOrEqual(4096);
+    expect(text.endsWith('[truncated]')).toBe(true);
+  });
+
+  it('truncates a photo caption to the shorter caption limit', async () => {
+    const fetchFn = vi.fn(async () => okResponse());
+
+    await new TelegramNotifier({ botToken: 'TOKEN', chatId: '42' }, fetchFn as unknown as typeof fetch)
+      .send({ ...alertWithPng, body: 'x'.repeat(2_000) });
+
+    const [, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const caption = (init.body as FormData).get('caption') as string;
+    expect(caption.length).toBeLessThanOrEqual(1024);
   });
 
   it('posts image alerts to sendPhoto as multipart', async () => {
@@ -171,6 +197,60 @@ describe('createNotifierFromEnv', () => {
       NOTIFY_EMAIL_TO: 'me@example.com',
     });
     expect(notifier).toBeInstanceOf(CompositeNotifier);
+  });
+
+  it('accepts a Telegram-only setup copied from .env.example', () => {
+    // .env.example ships PORT and SECURE pre-filled; they must not count as
+    // "email was configured", or the bot would refuse to start.
+    const notifier = createNotifierFromEnv({
+      WA_PHONE_NUMBER: '34600111222',
+      NOTIFY_TELEGRAM_BOT_TOKEN: 'TOKEN',
+      NOTIFY_TELEGRAM_CHAT_ID: '42',
+      NOTIFY_SMTP_PORT: '587',
+      NOTIFY_SMTP_SECURE: 'false',
+      NOTIFY_SMTP_HOST: '',
+      NOTIFY_EMAIL_FROM: '',
+      NOTIFY_EMAIL_TO: '',
+    });
+    expect(notifier).toBeInstanceOf(CompositeNotifier);
+  });
+
+  it('accepts an untouched .env.example with no channel at all', () => {
+    expect(() => createNotifierFromEnv({ NOTIFY_SMTP_PORT: '587', NOTIFY_SMTP_SECURE: 'false' }))
+      .not.toThrow();
+  });
+
+  it('rejects an SMTP user without a password', () => {
+    expect(() =>
+      createNotifierFromEnv({
+        NOTIFY_SMTP_HOST: 'smtp.example.com',
+        NOTIFY_SMTP_USER: 'bot@example.com',
+        NOTIFY_EMAIL_FROM: 'bot@example.com',
+        NOTIFY_EMAIL_TO: 'me@example.com',
+      }),
+    ).toThrow(/Missing: NOTIFY_SMTP_PASS/);
+  });
+
+  it.each(['TRUE', '1', 'yes', 'on'])('accepts %s as a secure flag', value => {
+    expect(() =>
+      createNotifierFromEnv({
+        NOTIFY_SMTP_HOST: 'smtp.example.com',
+        NOTIFY_SMTP_SECURE: value,
+        NOTIFY_EMAIL_FROM: 'bot@example.com',
+        NOTIFY_EMAIL_TO: 'me@example.com',
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects an unrecognised secure flag rather than silently using plaintext', () => {
+    expect(() =>
+      createNotifierFromEnv({
+        NOTIFY_SMTP_HOST: 'smtp.example.com',
+        NOTIFY_SMTP_SECURE: 'ssl',
+        NOTIFY_EMAIL_FROM: 'bot@example.com',
+        NOTIFY_EMAIL_TO: 'me@example.com',
+      }),
+    ).toThrow(NotifierConfigError);
   });
 
   it('rejects a half-configured Telegram channel', () => {

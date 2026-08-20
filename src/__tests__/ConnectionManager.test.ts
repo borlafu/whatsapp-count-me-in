@@ -208,6 +208,82 @@ describe('ConnectionManager', () => {
       await h.advance(1_000);
       expect(h.sockets).toHaveLength(3);
     });
+
+    it('falls back to backoff after five immediate restarts in a row', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      for (let i = 0; i < 5; i++) {
+        await h.close(h.sockets[i]!, wsError(DisconnectReason.restartRequired));
+        await h.advance(0);
+        expect(h.sockets).toHaveLength(i + 2);
+      }
+
+      // Sixth in a row: stop hammering the server.
+      await h.close(h.sockets[5]!, wsError(DisconnectReason.restartRequired));
+      await h.advance(0);
+      expect(h.sockets).toHaveLength(6);
+      await h.advance(1_000);
+      expect(h.sockets).toHaveLength(7);
+    });
+
+    it('resets the restart allowance once the connection opens', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      for (let i = 0; i < 5; i++) {
+        await h.close(h.sockets[i]!, wsError(DisconnectReason.restartRequired));
+        await h.advance(0);
+      }
+      await h.open(h.sockets[5]!);
+
+      await h.close(h.sockets[5]!, wsError(DisconnectReason.restartRequired));
+      await h.advance(0);
+      expect(h.sockets).toHaveLength(7);
+    });
+  });
+
+  describe('unexplained stream errors (badSession)', () => {
+    it('retries with backoff instead of wiping on the first occurrence', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      await h.close(h.sockets[0]!, wsError(DisconnectReason.badSession));
+      expect(h.wipe).not.toHaveBeenCalled();
+
+      await h.advance(1_000);
+      expect(h.sockets).toHaveLength(2);
+    });
+
+    it('re-pairs after five in a row', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      const delays = [1_000, 2_000, 4_000, 8_000, 16_000];
+      for (const [index, delay] of delays.entries()) {
+        await h.close(h.sockets[index]!, wsError(DisconnectReason.badSession));
+        expect(h.wipe).not.toHaveBeenCalled();
+        await h.advance(delay);
+      }
+
+      await h.close(h.sockets[5]!, wsError(DisconnectReason.badSession));
+      expect(h.wipe).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgets the streak once the connection opens', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      const delays = [1_000, 2_000, 4_000, 8_000, 16_000];
+      for (const [index, delay] of delays.entries()) {
+        await h.close(h.sockets[index]!, wsError(DisconnectReason.badSession));
+        await h.advance(delay);
+      }
+      await h.open(h.sockets[5]!);
+
+      await h.close(h.sockets[5]!, wsError(DisconnectReason.badSession));
+      expect(h.wipe).not.toHaveBeenCalled();
+    });
   });
 
   describe('fatal disconnects', () => {
@@ -231,7 +307,7 @@ describe('ConnectionManager', () => {
       h.wipe.mockRejectedValueOnce(new Error('EACCES'));
       await h.manager.start();
 
-      await h.close(h.sockets[0]!, wsError(DisconnectReason.badSession));
+      await h.close(h.sockets[0]!, wsError(DisconnectReason.loggedOut));
 
       expect(h.alerts.map(a => a.subject)).toContain('WhatsApp bot needs manual attention');
     });
@@ -424,6 +500,21 @@ describe('ConnectionManager', () => {
       await emitQr(h, sock, 'qr-2');
 
       expect(sock.requestPairingCode).toHaveBeenCalledTimes(1);
+    });
+
+    it('requests a fresh pairing code for every new socket', async () => {
+      // A code is bound to the socket that issued it, so a reconnect while
+      // still unlinked must not keep advertising the previous one.
+      const h = createHarness({ phoneNumber: '34600111222' });
+      await h.manager.start();
+
+      await emitQr(h, h.sockets[0]!, 'qr-1');
+      await h.close(h.sockets[0]!, wsError(DisconnectReason.timedOut, 'QR refs attempts ended'));
+      await h.advance(1_000);
+
+      const next = h.sockets[1]!;
+      await emitQr(h, next, 'qr-2');
+      expect(next.requestPairingCode).toHaveBeenCalledTimes(1);
     });
 
     it('starts a new pairing window after the connection opens', async () => {

@@ -8,6 +8,10 @@ const BACKOFF_MAX_MS = 60_000;
 const BACKOFF_JITTER_RATIO = 0.2;
 /** A replaced session sometimes comes back; give it a few spaced tries before re-pairing. */
 const REPLACED_BACKOFF_MS = [30_000, 60_000, 120_000];
+/** WhatsApp can ask for a restart repeatedly; stop hammering it after this many in a row. */
+const MAX_IMMEDIATE_RESTARTS = 5;
+/** How many unexplained stream errors in a row before the session is written off. */
+const MAX_SUSPECT_ATTEMPTS = 5;
 const DOWN_ALERT_AFTER_MS = 5 * 60_000;
 
 /** Every event this class or its collaborators register on a socket. */
@@ -54,6 +58,8 @@ export class ConnectionManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private transientAttempt = 0;
   private replacedAttempt = 0;
+  private restartAttempt = 0;
+  private suspectAttempt = 0;
   private downSince: number | null = null;
   private hasSentDownAlert = false;
   private now: () => number;
@@ -90,7 +96,15 @@ export class ConnectionManager {
     try {
       const { state, saveCreds } = await this.deps.authState.load();
       const sock = await this.deps.createSocket(state);
+      // stop() may have run while the two awaits above were in flight.
+      if (this.isStopped) {
+        await this.teardown(sock);
+        return;
+      }
       this.currentSock = sock;
+      // A pairing code is bound to the socket that issued it, so each new socket
+      // starts a new code (the QR push throttle deliberately survives).
+      this.pairing.beginSocketWindow();
 
       sock.ev.on('creds.update', () => {
         saveCreds().catch(err => console.error('Failed to persist credentials:', err));
@@ -129,8 +143,7 @@ export class ConnectionManager {
 
   private handleOpen(sock: WASocket): void {
     const wasReportedDown = this.hasSentDownAlert;
-    this.transientAttempt = 0;
-    this.replacedAttempt = 0;
+    this.resetAttemptCounters();
     this.downSince = null;
     this.hasSentDownAlert = false;
     this.pairing.reset();
@@ -154,11 +167,6 @@ export class ConnectionManager {
     const reason = describeDisconnect(error);
     console.log(`Connection closed [${kind}]: ${reason}`);
 
-    if (kind === 'restart') {
-      this.scheduleReconnect(0);
-      return;
-    }
-
     if (kind === 'fatal') {
       await this.recoverSession(reason);
       return;
@@ -169,7 +177,22 @@ export class ConnectionManager {
       return;
     }
 
+    if (kind === 'suspect' && this.suspectAttempt >= MAX_SUSPECT_ATTEMPTS) {
+      await this.recoverSession(`${reason} — repeated ${MAX_SUSPECT_ATTEMPTS} times in a row`);
+      return;
+    }
+    if (kind === 'suspect') this.suspectAttempt += 1;
+
     await this.alertIfDownTooLong();
+
+    // WhatsApp asking for a restart is normal, but it can also get stuck asking
+    // forever; fall back to the regular backoff instead of spinning.
+    if (kind === 'restart' && this.restartAttempt < MAX_IMMEDIATE_RESTARTS) {
+      this.restartAttempt += 1;
+      this.scheduleReconnect(0);
+      return;
+    }
+
     this.scheduleReconnect(this.nextTransientDelay());
   }
 
@@ -210,11 +233,17 @@ export class ConnectionManager {
       return;
     }
 
-    this.transientAttempt = 0;
-    this.replacedAttempt = 0;
+    this.resetAttemptCounters();
     this.pairing.reset();
     console.log('Credentials wiped. Starting a new pairing session.');
     this.scheduleReconnect(0);
+  }
+
+  private resetAttemptCounters(): void {
+    this.transientAttempt = 0;
+    this.replacedAttempt = 0;
+    this.restartAttempt = 0;
+    this.suspectAttempt = 0;
   }
 
   private markDown(): void {

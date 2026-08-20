@@ -2,6 +2,15 @@ import type { Alert, Notifier } from './Notifier.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const REQUEST_TIMEOUT_MS = 15_000;
+/** Telegram rejects anything longer, which would silently lose the alert. */
+const MAX_MESSAGE_LENGTH = 4096;
+const MAX_CAPTION_LENGTH = 1024;
+const TRUNCATION_SUFFIX = '\n[truncated]';
+
+function truncate(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  return text.slice(0, limit - TRUNCATION_SUFFIX.length) + TRUNCATION_SUFFIX;
+}
 
 export interface TelegramConfig {
   botToken: string;
@@ -19,7 +28,10 @@ export class TelegramNotifier implements Notifier {
   ) {}
 
   async send(alert: Alert): Promise<void> {
-    const text = `*${alert.subject}*\n\n${alert.body}`;
+    // Sent as plain text on purpose: alert bodies contain stack traces and raw
+    // error messages, and any stray Markdown character would make Telegram
+    // reject the whole request.
+    const text = `${alert.subject}\n\n${alert.body}`;
     try {
       if (alert.attachment) {
         await this.sendPhoto(text, alert.attachment);
@@ -34,8 +46,7 @@ export class TelegramNotifier implements Notifier {
   private async sendMessage(text: string): Promise<void> {
     const body = new URLSearchParams({
       chat_id: this.config.chatId,
-      text,
-      parse_mode: 'Markdown',
+      text: truncate(text, MAX_MESSAGE_LENGTH),
     });
     await this.post('sendMessage', body);
   }
@@ -43,8 +54,7 @@ export class TelegramNotifier implements Notifier {
   private async sendPhoto(caption: string, attachment: NonNullable<Alert['attachment']>): Promise<void> {
     const form = new FormData();
     form.append('chat_id', this.config.chatId);
-    form.append('caption', caption);
-    form.append('parse_mode', 'Markdown');
+    form.append('caption', truncate(caption, MAX_CAPTION_LENGTH));
     // Buffer is a Uint8Array view; copy into a plain view so Blob accepts it.
     form.append(
       'photo',

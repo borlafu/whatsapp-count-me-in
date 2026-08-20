@@ -25,9 +25,18 @@ export class Pairing {
     private now: () => number = Date.now,
   ) {}
 
-  /** Starts a new pairing window (called once the connection is live again). */
+  /** Starts a new pairing window: forgets the throttle as well as the code. */
   reset(): void {
     this.lastPushAt = null;
+    this.beginSocketWindow();
+  }
+
+  /**
+   * Called for every new socket. A pairing code is bound to the socket that
+   * issued it, so it must be re-requested; the push throttle deliberately
+   * survives, since sockets churn while nobody has linked the bot yet.
+   */
+  beginSocketWindow(): void {
     this.pairingCode = null;
     this.hasRequestedCode = false;
   }

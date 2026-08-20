@@ -3,6 +3,7 @@ package-lock.json
 .DS_Store
 *.db
 *.db-journal
+*.db.backup
 .vscode/
 .auth_info_baileys
 dist/

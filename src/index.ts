@@ -25,9 +25,10 @@ function readPhoneNumber(): string | undefined {
   const raw = process.env['WA_PHONE_NUMBER']?.replace(/[\s+()-]/g, '') ?? '';
   if (!raw) return undefined;
   if (!PHONE_NUMBER_PATTERN.test(raw)) {
+    // The value itself is not logged: logs/out.log is not the place for it.
     console.warn(
-      `WA_PHONE_NUMBER "${raw}" is not a plain international number (digits only, country code, ` +
-        'no "+"). Pairing codes are disabled; QR codes will still be sent.',
+      'WA_PHONE_NUMBER is not a plain international number (8-15 digits, country code, no "+"). ' +
+        'Pairing codes are disabled; QR codes will still be sent.',
     );
     return undefined;
   }
@@ -120,14 +121,21 @@ class WhatsAppBot {
 const CRASH_ALERT_TIMEOUT_MS = 10_000;
 
 function installCrashHandlers(notifier: Notifier): void {
+  let isReporting = false;
+
   const report = (label: string, err: unknown) => {
     console.error(`${label}:`, err);
+    // A second error while the first is being reported must not race the exit.
+    if (isReporting) return;
+    isReporting = true;
+
     const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
     const alert = notifier
       .send({ subject: 'WhatsApp bot crashed', body: `${label}:\n\n${detail}` })
       .catch(sendErr => console.error('Failed to report crash:', sendErr));
-    // Exit even if a channel hangs, so the process manager can restart us.
-    const timeout = new Promise(resolve => setTimeout(resolve, CRASH_ALERT_TIMEOUT_MS).unref());
+    // Not unref'd: the timer has to hold the loop open, otherwise a hanging
+    // channel lets Node exit on its own with code 0 and PM2 sees a clean stop.
+    const timeout = new Promise(resolve => setTimeout(resolve, CRASH_ALERT_TIMEOUT_MS));
     Promise.race([alert, timeout]).finally(() => process.exit(1));
   };
 

@@ -34,6 +34,20 @@ function buildTelegram(env: Env): Notifier | null {
   return new TelegramNotifier({ botToken: token!, chatId: chatId! });
 }
 
+const TRUTHY_VALUES = ['true', '1', 'yes', 'on'];
+const FALSY_VALUES = ['false', '0', 'no', 'off'];
+
+/** Lenient on purpose: a typo here silently means plaintext on an SSL-only port. */
+function parseBoolean(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const value = raw.toLowerCase();
+  if (TRUTHY_VALUES.includes(value)) return true;
+  if (FALSY_VALUES.includes(value)) return false;
+  throw new NotifierConfigError(
+    `NOTIFY_SMTP_SECURE must be one of ${[...TRUTHY_VALUES, ...FALSY_VALUES].join(', ')}, got "${raw}".`,
+  );
+}
+
 function parsePort(raw: string | undefined): number {
   if (!raw) return DEFAULT_SMTP_PORT;
   const port = Number(raw);
@@ -44,23 +58,27 @@ function parsePort(raw: string | undefined): number {
 }
 
 function buildEmail(env: Env): Notifier | null {
-  const emailKeys = [
+  // Only the keys that carry a real setting count as "email was configured".
+  // PORT and SECURE ship pre-filled in .env.example, so treating them as a
+  // signal would make a Telegram-only setup fail to start.
+  const credentialKeys = [
     'NOTIFY_SMTP_HOST',
-    'NOTIFY_SMTP_PORT',
-    'NOTIFY_SMTP_SECURE',
     'NOTIFY_SMTP_USER',
     'NOTIFY_SMTP_PASS',
     'NOTIFY_EMAIL_FROM',
     'NOTIFY_EMAIL_TO',
   ];
-  if (!emailKeys.some(key => read(env, key))) return null;
+  if (!credentialKeys.some(key => read(env, key))) return null;
 
   requireAll(env, ['NOTIFY_SMTP_HOST', 'NOTIFY_EMAIL_FROM', 'NOTIFY_EMAIL_TO'], 'Email');
+  if (read(env, 'NOTIFY_SMTP_USER') || read(env, 'NOTIFY_SMTP_PASS')) {
+    requireAll(env, ['NOTIFY_SMTP_USER', 'NOTIFY_SMTP_PASS'], 'SMTP authentication');
+  }
 
   const config: SmtpConfig = {
     host: read(env, 'NOTIFY_SMTP_HOST')!,
     port: parsePort(read(env, 'NOTIFY_SMTP_PORT')),
-    secure: read(env, 'NOTIFY_SMTP_SECURE') === 'true',
+    secure: parseBoolean(read(env, 'NOTIFY_SMTP_SECURE')),
     from: read(env, 'NOTIFY_EMAIL_FROM')!,
     to: read(env, 'NOTIFY_EMAIL_TO')!,
     ...(read(env, 'NOTIFY_SMTP_USER') ? { user: read(env, 'NOTIFY_SMTP_USER')! } : {}),

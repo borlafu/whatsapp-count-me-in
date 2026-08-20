@@ -80,10 +80,12 @@ The bot classifies every disconnect and reacts accordingly:
 
 | Situation | Behaviour |
 | --- | --- |
-| Network blip, server hiccup, restart requested by WhatsApp | Reconnect with exponential backoff (1s → 60s, jittered), retrying indefinitely. |
+| Network blip or server hiccup | Reconnect with exponential backoff (1s → 60s, jittered), retrying indefinitely. |
+| Restart requested by WhatsApp | Immediate reconnect, up to five in a row before falling back to the backoff. |
 | Offline for more than 5 minutes | One "bot is offline" alert, and a "back online" alert once it recovers. |
 | Session replaced by another WhatsApp Web login (`Stream Errored (conflict)`) | Three spaced retries (30s / 60s / 120s), then treated as a lost session. |
-| Logged out, forbidden, device mismatch, corrupted credentials | Deletes `.auth_info_baileys` automatically and starts a new pairing session, sending you the pairing code and QR code. |
+| Unexplained stream error | Retried like a network blip, and only treated as a lost session after five in a row. |
+| Logged out, forbidden, device mismatch | Deletes `.auth_info_baileys` automatically and starts a new pairing session, sending you the pairing code and QR code. |
 
 The process never exits on a connection problem, so the process manager can't restart it into the
 same broken session.

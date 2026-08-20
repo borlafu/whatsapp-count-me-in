@@ -22,9 +22,14 @@ describe('classifyDisconnect', () => {
     ['loggedOut', DisconnectReason.loggedOut],
     ['forbidden', DisconnectReason.forbidden],
     ['multideviceMismatch', DisconnectReason.multideviceMismatch],
-    ['badSession', DisconnectReason.badSession],
   ])('classifies %s as fatal', (_name, code) => {
     expect(classifyDisconnect(wsError(code))).toBe('fatal');
+  });
+
+  it('classifies badSession as suspect, not fatal', () => {
+    // Baileys also uses 500 as its fallback for any stream error it cannot
+    // classify, so it must not wipe credentials on the first occurrence.
+    expect(classifyDisconnect(wsError(DisconnectReason.badSession))).toBe('suspect');
   });
 
   it.each([

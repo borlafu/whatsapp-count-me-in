@@ -7,15 +7,16 @@ import { DisconnectReason } from '@whiskeysockets/baileys';
  * - `transient` Network-level blip: retry with exponential backoff, forever.
  * - `replaced`  Another WhatsApp Web session took over ("Stream Errored (conflict)").
  *               Worth a few spaced retries, then the session must be considered gone.
+ * - `suspect`   Possibly a broken session, possibly not: retry, and only give up
+ *               after it keeps happening.
  * - `fatal`     Credentials are unusable: the auth state has to be wiped and re-paired.
  */
-export type DisconnectClass = 'restart' | 'transient' | 'replaced' | 'fatal';
+export type DisconnectClass = 'restart' | 'transient' | 'replaced' | 'suspect' | 'fatal';
 
 const FATAL_CODES: ReadonlySet<number> = new Set([
   DisconnectReason.loggedOut, // 401
   DisconnectReason.forbidden, // 403
   DisconnectReason.multideviceMismatch, // 411
-  DisconnectReason.badSession, // 500
 ]);
 
 const TRANSIENT_CODES: ReadonlySet<number> = new Set([
@@ -41,6 +42,9 @@ export function classifyDisconnect(error: unknown): DisconnectClass {
   if (statusCode === DisconnectReason.restartRequired) return 'restart';
   if (statusCode === DisconnectReason.connectionReplaced) return 'replaced';
   if (FATAL_CODES.has(statusCode)) return 'fatal';
+  // 500 is also Baileys' fallback for any <stream:error> it cannot classify
+  // (getErrorCodeFromStreamError), so it is not proof of a broken session.
+  if (statusCode === DisconnectReason.badSession) return 'suspect';
   if (TRANSIENT_CODES.has(statusCode)) return 'transient';
   return 'transient';
 }

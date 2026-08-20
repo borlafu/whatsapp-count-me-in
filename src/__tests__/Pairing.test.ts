@@ -42,6 +42,19 @@ describe('Pairing', () => {
     expect(alerts[0]?.body).toContain('Link with phone number instead');
   });
 
+  it('re-requests the code for a new socket but keeps the push throttle', async () => {
+    let clock = 0;
+    const pairing = new Pairing(notifier, '34600111222', () => clock);
+
+    await pairing.handleQr('2@abc', sock);
+    clock += 10_000;
+    pairing.beginSocketWindow();
+    await pairing.handleQr('2@def', sock);
+
+    expect(sock.requestPairingCode).toHaveBeenCalledTimes(2);
+    expect(alerts).toHaveLength(1);
+  });
+
   it('resets the rate limit and pairing code for a new window', async () => {
     let clock = 0;
     const pairing = new Pairing(notifier, '34600111222', () => clock);
