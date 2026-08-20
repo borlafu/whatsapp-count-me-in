@@ -5,7 +5,7 @@
   "description": "Super-lightweight WhatsApp bot for managing event sign-ups and waitlists in groups.",
   "main": "dist/index.js",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
     "build": "tsc",
     "test": "vitest run"
   },
@@ -19,6 +19,7 @@
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "better-sqlite3": "^13.0.3",
+    "nodemailer": "^9.0.5",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.12",

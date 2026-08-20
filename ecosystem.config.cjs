@@ -3,7 +3,9 @@ module.exports = {
     {
       name: 'whatsapp-count-me-in',
       script: 'node',
-      args: 'dist/index.js',
+      // --env-file loads alert credentials from .env (see .env.example). Node
+      // ignores the flag silently if the file is missing, so it stays optional.
+      args: '--env-file-if-exists=.env dist/index.js',
       watch: false,
       autorestart: true,
       restart_delay: 5000,       // wait 5s before restarting after a crash

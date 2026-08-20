@@ -19,6 +19,8 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - **Auto-cancel**: Automatically cancels the event when its scheduled time is reached.
 - **Daily Reminders**: Sends a daily reminder at 09:00 UTC for upcoming timed events (can be toggled off).
 - **Low Profile Engine**: Specifically designed to run in environments with 1GB RAM or less, consuming < 100MB of RAM.
+- **Self-healing connection**: Transient drops reconnect with exponential backoff. When the session becomes unusable (logged out, replaced by another WhatsApp Web session, corrupted credentials) the bot resets its own credentials and starts a new pairing session — no SSH, no manual restart.
+- **Re-link alerts**: Sends the pairing code and QR code to Telegram and/or email, plus an alert if it has been offline for more than five minutes and another when it recovers.
 
 ## Commands
 
@@ -53,6 +55,39 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 3. Scan the QR code displayed in your terminal using WhatsApp (Menu > Linked Devices).
 4. Note: Authentication data will be safely stored in the `.auth_info_baileys` folder.
 
+## Configuration
+
+All configuration is optional and read from the environment. Copy `.env.example` to `.env` and
+fill in what you need; `pnpm start` and the PM2 setup both load `.env` automatically.
+
+| Variable | Purpose |
+| --- | --- |
+| `WA_PHONE_NUMBER` | Your number in international format, digits only (e.g. `34600111222`). Enables 8-character pairing codes as an alternative to scanning a QR. |
+| `NOTIFY_TELEGRAM_BOT_TOKEN` / `NOTIFY_TELEGRAM_CHAT_ID` | Sends alerts (and the QR image) through a Telegram bot. |
+| `NOTIFY_SMTP_HOST` / `NOTIFY_SMTP_PORT` / `NOTIFY_SMTP_SECURE` / `NOTIFY_SMTP_USER` / `NOTIFY_SMTP_PASS` / `NOTIFY_EMAIL_FROM` / `NOTIFY_EMAIL_TO` | Sends the same alerts by email over any SMTP server. |
+
+Both channels can be enabled at once. A partially configured channel is rejected at startup so
+alerts never fail silently. With no channel configured the bot falls back to logging the
+instructions, which is fine for local development.
+
+> **Security:** a QR code or pairing code grants full control of the linked WhatsApp account.
+> Point alerts at a private Telegram chat and a mailbox you control, and keep `.env` out of
+> version control.
+
+## Connection Recovery
+
+The bot classifies every disconnect and reacts accordingly:
+
+| Situation | Behaviour |
+| --- | --- |
+| Network blip, server hiccup, restart requested by WhatsApp | Reconnect with exponential backoff (1s → 60s, jittered), retrying indefinitely. |
+| Offline for more than 5 minutes | One "bot is offline" alert, and a "back online" alert once it recovers. |
+| Session replaced by another WhatsApp Web login (`Stream Errored (conflict)`) | Three spaced retries (30s / 60s / 120s), then treated as a lost session. |
+| Logged out, forbidden, device mismatch, corrupted credentials | Deletes `.auth_info_baileys` automatically and starts a new pairing session, sending you the pairing code and QR code. |
+
+The process never exits on a connection problem, so the process manager can't restart it into the
+same broken session.
+
 ## Build for Production
 
 For lowest CPU and memory footprint, pre-compile the TypeScript source codes to JavaScript before deployment.
@@ -86,10 +121,14 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 
    ```bash
    docker run -it --rm \
+     --env-file .env \
      -v $(pwd)/.auth_info_baileys:/app/.auth_info_baileys:z \
      -v $(pwd)/events.db:/app/events.db:z \
      borlafu/whatsapp-count-me-in
    ```
+
+   Drop `--env-file .env` if you don't want alerts. Note the auth folder must be a mounted volume
+   for self-healing to survive a container restart.
 
 3. Scan the QR code via terminal block when first linking the device.
 
@@ -97,13 +136,15 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 
 1. Build the app as described previously.
 2. Install PM2 process monitor globally (`pnpm add -g pm2`).
-3. Limit the application's aggressive memory consumption dynamically and start the cluster:
+3. Optional: create `.env` next to `ecosystem.config.cjs` so alerts survive deploys (it is
+   gitignored, so `git reset --hard` during deployment leaves it untouched).
+4. Limit the application's aggressive memory consumption dynamically and start the cluster:
 
    ```bash
    pm2 start ecosystem.config.cjs
    ```
 
-4. Follow logs to scan the QR code using:
+5. Follow logs to scan the QR code using:
 
    ```bash
    pm2 logs whatsapp-count-me-in
@@ -113,4 +154,5 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 
 - [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys)
 - [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)
+- [nodemailer](https://github.com/nodemailer/nodemailer)
 - [pm2](https://github.com/Unitech/pm2)
