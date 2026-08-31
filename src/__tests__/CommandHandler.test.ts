@@ -964,3 +964,70 @@ describe('CommandHandler participation cheers', () => {
     expect(call).toBeGreaterThan(1);
   });
 });
+
+describe('CommandHandler date locale', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+  let handler: CommandHandler;
+
+  const chatId = '12345@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+
+  const mockSock: any = {
+    user: { id: adminId },
+    groupMetadata: vi.fn(),
+    sendMessage: vi.fn()
+  };
+
+  const adminMsg = (text: string): any => ({
+    key: { remoteJid: chatId, fromMe: false, participant: adminId },
+    message: { conversation: text },
+    pushName: 'Admin User'
+  });
+
+  const lastText = (): string => {
+    const calls = mockSock.sendMessage.mock.calls;
+    return calls[calls.length - 1][1].text as string;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+    handler = new CommandHandler(service, db);
+    mockSock.groupMetadata.mockResolvedValue({
+      participants: [{ id: adminId, admin: 'admin' }]
+    });
+  });
+
+  it('formats the scheduled date in Spanish when the group is Spanish', async () => {
+    db.setLocale(chatId, 'es');
+    await handler.handleCommand(adminMsg('!crear "Partido" 12 2026-09-07 19:00 Europe/Madrid'), mockSock);
+
+    const text = lastText();
+    expect(text).toContain('lunes');
+    expect(text).toContain('septiembre');
+    expect(text).not.toContain('Monday');
+    expect(text).not.toContain('September');
+  });
+
+  it('formats the scheduled date in English when the group is English', async () => {
+    await handler.handleCommand(adminMsg('!create "Match" 12 2026-09-07 19:00 Europe/Madrid'), mockSock);
+
+    const text = lastText();
+    expect(text).toContain('Monday');
+    expect(text).toContain('September');
+  });
+
+  it('formats a rescheduled date in the group language', async () => {
+    db.setLocale(chatId, 'es');
+    await handler.handleCommand(adminMsg('!crear "Partido" 12'), mockSock);
+    mockSock.sendMessage.mockClear();
+
+    await handler.handleCommand(adminMsg('!reprogramar 2026-09-07 19:00 Europe/Madrid'), mockSock);
+
+    const text = lastText();
+    expect(text).toContain('septiembre');
+    expect(text).not.toContain('September');
+  });
+});
