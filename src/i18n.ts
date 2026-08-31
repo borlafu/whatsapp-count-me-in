@@ -1,6 +1,6 @@
 export type Locale = 'en' | 'es';
 
-interface MessageTemplates {
+export interface MessageTemplates {
   // Admin
   adminOnly: () => string;
 
@@ -87,6 +87,14 @@ interface MessageTemplates {
   // Resize promotion
   bulkPromoted: (names: string, title: string) => string;
 
+  // Participation cheers
+  cheerFirstTime: (mention: string) => string;
+  cheerStreak: (mention: string, count: number) => string;
+  cheerComeback: (mention: string, gap: string) => string;
+  streakLost: (mention: string, count: number) => string;
+  gapWeeks: (n: number) => string;
+  gapMonths: (n: number) => string;
+
   // Help
   helpMessage: () => string;
 }
@@ -150,6 +158,12 @@ const messages: Record<Locale, MessageTemplates> = {
     reminderMessage: (title, available, total, countdown) =>
       `🔔 *Reminder: "${title}"*\nSlots available: ${available}/${total}\n⏱ ${countdown} to go!\nUse !join to sign up.`,
     bulkPromoted: (names, title) => `🎉 The following people have been automatically promoted to "${title}": ${names}`,
+    cheerFirstTime: (mention) => `🎉 We have a new arrival! Welcome, @${mention}!`,
+    cheerStreak: (mention, count) => `🔥 @${mention} has joined ${count} times in a row — on a roll!`,
+    cheerComeback: (mention, gap) => `👋 @${mention} is back after ${gap} away!`,
+    streakLost: (mention, count) => `💔 @${mention}, you have lost your streak of ${count} events.`,
+    gapWeeks: (n) => `${n} ${n === 1 ? 'week' : 'weeks'}`,
+    gapMonths: (n) => `${n} ${n === 1 ? 'month' : 'months'}`,
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
       `*!create "Title" <slots> [date time TZ] [--close-and-group Xh]*  — Create an event (admin only)\n` +
@@ -225,6 +239,12 @@ const messages: Record<Locale, MessageTemplates> = {
     reminderMessage: (title, available, total, countdown) =>
       `🔔 *Recordatorio: "${title}"*\nPlazas disponibles: ${available}/${total}\n⏱ ¡Faltan ${countdown}!\nUsa !unirse para apuntarte.`,
     bulkPromoted: (names, title) => `🎉 Las siguientes personas han sido promovidas automáticamente a "${title}": ${names}`,
+    cheerFirstTime: (mention) => `🎉 ¡Tenemos nueva incorporación! ¡Bienvenido/a @${mention}!`,
+    cheerStreak: (mention, count) => `🔥 ¡@${mention} se ha unido ${count} veces seguidas, está en racha!`,
+    cheerComeback: (mention, gap) => `👋 ¡Ha vuelto @${mention} tras ${gap} fuera!`,
+    streakLost: (mention, count) => `💔 @${mention}, has perdido tu racha de ${count} eventos.`,
+    gapWeeks: (n) => `${n} ${n === 1 ? 'semana' : 'semanas'}`,
+    gapMonths: (n) => `${n} ${n === 1 ? 'mes' : 'meses'}`,
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
       `*!crear "Título" <plazas> [fecha hora TZ] [--close-and-group Xh]*  — Crear un evento (solo admins)\n` +

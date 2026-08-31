@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc } from '../formatters.js';
+import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc, formatAbsenceGap } from '../formatters.js';
+import { t } from '../i18n.js';
 
 describe('parsePositiveInt', () => {
   it('parses a plain positive integer', () => {
@@ -181,5 +182,50 @@ describe('localToUtc', () => {
     expect(utc).not.toBeNull();
     const formatted = formatEventDate(utc!, 'Asia/Tokyo');
     expect(formatted).toContain('15:30');
+  });
+});
+
+describe('formatAbsenceGap', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const WEEK_MS = 7 * DAY_MS;
+
+  it('reports whole weeks for short absences', () => {
+    expect(formatAbsenceGap(3 * WEEK_MS, 'es', t)).toBe('3 semanas');
+    expect(formatAbsenceGap(3 * WEEK_MS, 'en', t)).toBe('3 weeks');
+  });
+
+  it('uses the singular for a one-week absence', () => {
+    expect(formatAbsenceGap(WEEK_MS, 'es', t)).toBe('1 semana');
+    expect(formatAbsenceGap(WEEK_MS, 'en', t)).toBe('1 week');
+  });
+
+  it('switches to months once the absence reaches eight weeks', () => {
+    // Eight weeks is 1.84 average months, which reads better rounded up.
+    expect(formatAbsenceGap(8 * WEEK_MS, 'es', t)).toBe('2 meses');
+    // 140 days is 4.6 average months.
+    expect(formatAbsenceGap(20 * WEEK_MS, 'es', t)).toBe('5 meses');
+    expect(formatAbsenceGap(20 * WEEK_MS, 'en', t)).toBe('5 months');
+  });
+
+  it('still reports weeks just below the month cutoff', () => {
+    expect(formatAbsenceGap(7 * WEEK_MS, 'es', t)).toBe('7 semanas');
+    expect(formatAbsenceGap(7 * WEEK_MS, 'en', t)).toBe('7 weeks');
+  });
+
+  it('never reports less than one week, even for a same-day gap', () => {
+    expect(formatAbsenceGap(0, 'es', t)).toBe('1 semana');
+    expect(formatAbsenceGap(2 * DAY_MS, 'en', t)).toBe('1 week');
+  });
+
+  it('treats a negative gap from clock skew as the minimum', () => {
+    expect(formatAbsenceGap(-5 * WEEK_MS, 'en', t)).toBe('1 week');
+  });
+});
+
+describe('formatAbsenceGap with unusable input', () => {
+  it('falls back to the minimum rather than rendering NaN', () => {
+    expect(formatAbsenceGap(NaN, 'es', t)).toBe('1 semana');
+    expect(formatAbsenceGap(NaN, 'en', t)).toBe('1 week');
+    expect(formatAbsenceGap(Infinity, 'en', t)).toBe('1 week');
   });
 });

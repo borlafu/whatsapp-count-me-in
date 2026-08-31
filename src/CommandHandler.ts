@@ -1,7 +1,7 @@
 import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import type { DatabaseManager } from './Database.js';
-import { t, type Locale } from './i18n.js';
+import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
 import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
@@ -193,7 +193,7 @@ export class CommandHandler {
   }
 
   private async executeJoin(msg: WAMessage, chatId: string, targetUserId: string, targetUserName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
-    const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist);
+    const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist, locale);
     if (!result.success && result.messageKey === 'noActiveEvent') {
       return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
     }
@@ -202,6 +202,10 @@ export class CommandHandler {
       await this.handleStatus(msg, chatId, sock, locale);
     } else {
       await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+    }
+
+    if (result.cheer) {
+      await this.sendCheer(chatId, sock, locale, result.cheer.messageKey, result.cheer.params, result.cheer.mentions);
     }
 
     if (result.groupsUpdated) {
@@ -282,6 +286,24 @@ export class CommandHandler {
       const options: { mentions?: string[] } = {};
       if (result.mentions) options.mentions = result.mentions;
       await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])), options);
+    }
+
+    if (result.streakLoss) {
+      const loss = result.streakLoss;
+      await this.sendCheer(chatId, sock, locale, 'streakLost', [loss.userId.split('@')[0] ?? '', loss.streak], [loss.userId]);
+    }
+  }
+
+  /**
+   * Sends a cheer as its own message. Cheers are decoration, so a failure here
+   * is logged and swallowed rather than allowed to break the command that
+   * triggered it — the join or leave itself has already been confirmed.
+   */
+  private async sendCheer(chatId: string, sock: WASocket, locale: Locale, messageKey: keyof MessageTemplates, params: any[], mentions: string[]) {
+    try {
+      await sock.sendMessage(chatId, { text: t(locale, messageKey as any, ...params), mentions });
+    } catch (err) {
+      console.error('Failed to send cheer:', err);
     }
   }
 

@@ -30,6 +30,16 @@ export interface Participant {
   joined_at: string;
 }
 
+/** One past event in a group, flagged with whether a given user attended it. */
+export interface ParticipationRow {
+  id: number;
+  occurred_at: string;
+  participated: number;
+}
+
+/** Participant statuses that count as having actually taken part in an event. */
+const ATTENDED_STATUSES = ['joined', 'pending_promotion'] as const;
+
 const CURRENT_SCHEMA_VERSION = 3;
 
 export class DatabaseManager {
@@ -73,6 +83,13 @@ export class DatabaseManager {
         chat_id TEXT PRIMARY KEY,
         locale TEXT NOT NULL DEFAULT 'en'
       );
+    `);
+
+    // Participation history is read on every join and leave, so keep its two
+    // lookups off a full table scan as a group accumulates events.
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_events_chat_status ON events(chat_id, status);
+      CREATE INDEX IF NOT EXISTS idx_participants_event_user ON participants(event_id, user_id);
     `);
 
     const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
@@ -169,7 +186,7 @@ export class DatabaseManager {
   }
 
   getParticipants(eventId: number | bigint): Participant[] {
-    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status IN ('joined', 'waitlisted', 'pending_promotion') ORDER BY joined_at ASC`).all(eventId) as Participant[];
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status IN ('joined', 'waitlisted', 'pending_promotion') ORDER BY joined_at ASC, id ASC`).all(eventId) as Participant[];
   }
 
   getParticipant(eventId: number | bigint, userId: string): Participant | undefined {
@@ -178,6 +195,13 @@ export class DatabaseManager {
 
   updateParticipantStatus(eventId: number | bigint, userId: string, status: Participant['status']) {
     return this.db.prepare(`UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`).run(status, eventId, userId);
+  }
+
+  /** True when the user already signed up for this event and pulled out again. */
+  hasWithdrawnParticipant(eventId: number | bigint, userId: string): boolean {
+    const row = this.db.prepare(`SELECT 1 FROM participants WHERE event_id = ? AND user_id = ? AND status = 'withdrawn' LIMIT 1`)
+      .get(eventId, userId);
+    return row !== undefined;
   }
 
   withdrawParticipant(eventId: number | bigint, userId: string) {
@@ -201,11 +225,36 @@ export class DatabaseManager {
   }
 
   getNextInWaitlist(eventId: number | bigint): Participant | undefined {
-    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC LIMIT 1`).get(eventId) as Participant | undefined;
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC, id ASC LIMIT 1`).get(eventId) as Participant | undefined;
   }
 
   getAutoPromotableWaitlist(eventId: number | bigint): Participant[] {
-    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC`).all(eventId) as Participant[];
+    return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC, id ASC`).all(eventId) as Participant[];
+  }
+
+  /**
+   * Returns one user's attendance history for a group, oldest event first.
+   *
+   * Only concluded events with a scheduled date are history: untimed events are
+   * never auto-concluded, so counting them would read as a missed event forever,
+   * and cancelled events never happened so they cannot break a streak.
+   */
+  getParticipationHistory(chatId: string, userId: string): ParticipationRow[] {
+    const attendedPlaceholders = ATTENDED_STATUSES.map(() => '?').join(', ');
+    return this.db.prepare(`
+      SELECT e.id AS id,
+             e.event_at AS occurred_at,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM participants p
+               WHERE p.event_id = e.id AND p.user_id = ?
+                 AND p.status IN (${attendedPlaceholders})
+             ) THEN 1 ELSE 0 END AS participated
+      FROM events e
+      WHERE e.chat_id = ?
+        AND e.status IN ('concluded', 'completed')
+        AND e.event_at IS NOT NULL
+      ORDER BY e.event_at ASC, e.id ASC
+    `).all(userId, ...ATTENDED_STATUSES, chatId) as ParticipationRow[];
   }
 
   clearDatabase() {

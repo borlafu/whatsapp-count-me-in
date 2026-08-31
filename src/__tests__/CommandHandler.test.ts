@@ -838,3 +838,129 @@ describe('CommandHandler', () => {
     });
   });
 });
+
+describe('CommandHandler participation cheers', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+  let handler: CommandHandler;
+
+  const chatId = '12345@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const userId = 'user@s.whatsapp.net';
+
+  const mockSock: any = {
+    user: { id: adminId },
+    groupMetadata: vi.fn(),
+    sendMessage: vi.fn()
+  };
+
+  const createMockMsg = (text: string): any => ({
+    key: { remoteJid: chatId, fromMe: false, participant: userId },
+    message: { conversation: text },
+    pushName: 'Test User'
+  });
+
+  /** All message bodies the bot sent, in order. */
+  const sentTexts = (): string[] => mockSock.sendMessage.mock.calls.map((c: any) => c[1].text as string);
+
+  /** Records a concluded past event, optionally with the user attending. */
+  function pastEvent(attended: boolean, weekOffset: number) {
+    const eventAt = new Date(Date.UTC(2026, 0, 1) + weekOffset * 7 * 24 * 60 * 60 * 1000).toISOString();
+    const eventId = Number(db.createEvent(chatId, `Week ${weekOffset}`, 10, true, adminId, eventAt, 'UTC'));
+    if (attended) db.addParticipant(eventId, userId, 'Test User', 'joined');
+    db.concludeEvent(eventId);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+    handler = new CommandHandler(service, db);
+  });
+
+  it('sends a first-timer cheer alongside the status board', async () => {
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+    const texts = sentTexts();
+    expect(texts.some(t => t.includes('new arrival'))).toBe(true);
+    // The status board must still be posted, and before the cheer.
+    expect(texts[0]).toContain('Test Event');
+    expect(texts).toHaveLength(2);
+  });
+
+  it('mentions the user in the cheer so they get notified', async () => {
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+    const cheerCall = mockSock.sendMessage.mock.calls.find((c: any) => c[1].text.includes('new arrival'));
+    expect(cheerCall[1].mentions).toEqual([userId]);
+  });
+
+  it('cheers in the group language', async () => {
+    db.setLocale(chatId, 'es');
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+    expect(sentTexts().some(t => t.includes('nueva incorporación'))).toBe(true);
+  });
+
+  it('renders the absence gap in the group language', async () => {
+    db.setLocale(chatId, 'es');
+    pastEvent(true, 0);
+    pastEvent(false, 1);
+    pastEvent(false, 2);
+    pastEvent(false, 3);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+    const cheer = sentTexts().find(t => t.includes('Ha vuelto'));
+    expect(cheer).toBeDefined();
+    expect(cheer).toMatch(/tras \d+ (semanas?|meses|mes) fuera/);
+  });
+
+  it('sends no cheer for an unremarkable join', async () => {
+    pastEvent(true, 0);
+    pastEvent(false, 1);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+    expect(sentTexts()).toHaveLength(1);
+  });
+
+  it('warns about the lost streak when leaving', async () => {
+    pastEvent(true, 0);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    service.joinEvent(chatId, userId, 'Test User');
+    mockSock.sendMessage.mockClear();
+
+    await handler.handleCommand(createMockMsg('!leave'), mockSock);
+
+    const warning = sentTexts().find(t => t.includes('streak of'));
+    expect(warning).toContain('streak of 2');
+  });
+
+  it('still posts the status board when a leave loses a streak', async () => {
+    pastEvent(true, 0);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    service.joinEvent(chatId, userId, 'Test User');
+    mockSock.sendMessage.mockClear();
+
+    await handler.handleCommand(createMockMsg('!leave'), mockSock);
+    expect(sentTexts()[0]).toContain('Test Event');
+  });
+
+  it('does not let a failed cheer send suppress the join confirmation', async () => {
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    // First two calls are the quoted status reply; make every later send fail.
+    let call = 0;
+    mockSock.sendMessage.mockImplementation(async () => {
+      call += 1;
+      if (call > 1) throw new Error('send failed');
+      return {};
+    });
+
+    await expect(handler.handleCommand(createMockMsg('!join'), mockSock)).resolves.not.toThrow();
+    expect(call).toBeGreaterThan(1);
+  });
+});
