@@ -146,7 +146,7 @@ export class CommandHandler {
       }
     }
 
-    const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin);
+    const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin, locale);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 
@@ -172,7 +172,7 @@ export class CommandHandler {
       if (mins !== null && mins > 0) closeAndGroupOffsetMin = mins;
     }
 
-    const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin);
+    const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin, locale);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 
