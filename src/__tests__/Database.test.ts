@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { DatabaseManager } from '../Database.js';
+import { DatabaseManager, type Participant } from '../Database.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -62,5 +62,108 @@ describe('DatabaseManager Migration', () => {
     // 4. Cleanup
     dbManager.close();
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+  });
+});
+
+describe('DatabaseManager getParticipationHistory', () => {
+  const chatId = 'chat@g.us';
+  const otherChatId = 'other@g.us';
+  const userId = 'user@s.whatsapp.net';
+  const adminId = 'admin@s.whatsapp.net';
+
+  /** Creates a scheduled event, signs the given users up, and concludes it. */
+  function concludedEvent(
+    db: DatabaseManager,
+    chat: string,
+    title: string,
+    eventAt: string,
+    attendees: Array<[string, Participant['status']]>
+  ): number {
+    const eventId = Number(db.createEvent(chat, title, 10, true, adminId, eventAt, 'UTC'));
+    for (const [user, status] of attendees) {
+      db.addParticipant(eventId, user, user, status);
+    }
+    db.concludeEvent(eventId);
+    return eventId;
+  }
+
+  it('returns concluded timed events oldest first, flagging attendance', () => {
+    const db = new DatabaseManager(':memory:');
+    concludedEvent(db, chatId, 'Week 2', '2026-01-08T18:00:00.000Z', [[userId, 'joined']]);
+    concludedEvent(db, chatId, 'Week 1', '2026-01-01T18:00:00.000Z', [[adminId, 'joined']]);
+
+    const rows = db.getParticipationHistory(chatId, userId);
+    expect(rows.map(r => r.occurred_at)).toEqual([
+      '2026-01-01T18:00:00.000Z',
+      '2026-01-08T18:00:00.000Z',
+    ]);
+    expect(rows.map(r => r.participated)).toEqual([0, 1]);
+    db.close();
+  });
+
+  it('counts a pending promotion as attendance but not a waitlist spot', () => {
+    const db = new DatabaseManager(':memory:');
+    concludedEvent(db, chatId, 'Pending', '2026-01-01T18:00:00.000Z', [[userId, 'pending_promotion']]);
+    concludedEvent(db, chatId, 'Waitlisted', '2026-01-08T18:00:00.000Z', [[userId, 'waitlisted']]);
+    concludedEvent(db, chatId, 'Withdrawn', '2026-01-15T18:00:00.000Z', [[userId, 'withdrawn']]);
+
+    expect(db.getParticipationHistory(chatId, userId).map(r => r.participated)).toEqual([1, 0, 0]);
+    db.close();
+  });
+
+  it('ignores cancelled events entirely', () => {
+    const db = new DatabaseManager(':memory:');
+    const cancelledId = Number(db.createEvent(chatId, 'Cancelled', 10, true, adminId, '2026-01-08T18:00:00.000Z', 'UTC'));
+    db.cancelEvent(cancelledId);
+    concludedEvent(db, chatId, 'Played', '2026-01-01T18:00:00.000Z', [[userId, 'joined']]);
+
+    const rows = db.getParticipationHistory(chatId, userId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.occurred_at).toBe('2026-01-01T18:00:00.000Z');
+    db.close();
+  });
+
+  it('ignores untimed events, so missing one cannot break a streak', () => {
+    const db = new DatabaseManager(':memory:');
+    concludedEvent(db, chatId, 'Timed', '2026-01-01T18:00:00.000Z', [[userId, 'joined']]);
+    const untimedId = Number(db.createEvent(chatId, 'Untimed', 10, true, adminId));
+    db.concludeEvent(untimedId);
+
+    const rows = db.getParticipationHistory(chatId, userId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.participated).toBe(1);
+    db.close();
+  });
+
+  it('ignores still-active events', () => {
+    const db = new DatabaseManager(':memory:');
+    const activeId = Number(db.createEvent(chatId, 'Active', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(activeId, userId, userId, 'joined');
+
+    expect(db.getParticipationHistory(chatId, userId)).toEqual([]);
+    db.close();
+  });
+
+  it('scopes history to the requested group', () => {
+    const db = new DatabaseManager(':memory:');
+    concludedEvent(db, chatId, 'Here', '2026-01-01T18:00:00.000Z', [[userId, 'joined']]);
+    concludedEvent(db, otherChatId, 'Elsewhere', '2026-01-02T18:00:00.000Z', [[userId, 'joined']]);
+
+    expect(db.getParticipationHistory(chatId, userId)).toHaveLength(1);
+    expect(db.getParticipationHistory(otherChatId, userId)).toHaveLength(1);
+    db.close();
+  });
+
+  it('returns one row per event even if a user has several participant rows', () => {
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Rejoined', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(eventId, userId, userId, 'withdrawn');
+    db.addParticipant(eventId, userId, userId, 'joined');
+    db.concludeEvent(eventId);
+
+    const rows = db.getParticipationHistory(chatId, userId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.participated).toBe(1);
+    db.close();
   });
 });

@@ -83,6 +83,24 @@ export function localToUtc(dateStr: string, timeStr: string, timezone: string): 
   }
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+/** Average month length, so "4 months" lines up with the calendar over a year. */
+const MONTH_MS = 30.44 * 24 * 60 * 60 * 1000;
+/** Absences this long or longer read better in months than in weeks. */
+const MONTHS_FROM_WEEKS = 8;
+
+/**
+ * Describes how long someone has been away, e.g. "3 semanas" or "4 months".
+ * Clamped to at least one week: a shorter gap would read as "0 weeks away".
+ */
+export function formatAbsenceGap(gapMs: number, locale: Locale, tFn: typeof t): string {
+  const weeks = Math.max(1, Math.floor(gapMs / WEEK_MS));
+  if (weeks < MONTHS_FROM_WEEKS) {
+    return tFn(locale, 'gapWeeks', weeks);
+  }
+  return tFn(locale, 'gapMonths', Math.max(1, Math.round(gapMs / MONTH_MS)));
+}
+
 /** Returns a countdown string like "2d 4h" or "3h 20m". */
 export function formatCountdown(msUntil: number): string {
   const totalMin = Math.floor(msUntil / 60_000);

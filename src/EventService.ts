@@ -1,6 +1,8 @@
 import { DatabaseManager, type Participant } from './Database.js';
 import type { Locale } from './i18n.js';
-import { formatEventDate } from './formatters.js';
+import { formatEventDate, formatAbsenceGap } from './formatters.js';
+import { t } from './i18n.js';
+import { summarizeHistory, selectJoinCheer, STREAK_LOSS_MIN } from './participation.js';
 
 export interface StatusData {
   title: string;
@@ -24,6 +26,19 @@ export interface ServiceResult {
   };
   promotions?: Array<{ userId: string; userName: string }>;
   data?: StatusData;
+  cheer?: ServiceCheer;
+  streakLoss?: { userId: string; streak: number };
+}
+
+export interface ServiceCheer {
+  messageKey: string;
+  params: any[];
+  mentions: string[];
+}
+
+/** Guest sign-ups get a synthetic id per invite, so they have no history to read. */
+function isGuestId(userId: string): boolean {
+  return userId.startsWith('guest:');
 }
 
 export class EventService {
@@ -52,7 +67,41 @@ export class EventService {
     return { success: true, messageKey: 'eventRescheduled', params: [dateStr] };
   }
 
-  joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false): ServiceResult {
+  /**
+   * Builds the cheer for a join that just took a real spot, based on the user's
+   * history in this group alone. Returns undefined when the join is unremarkable.
+   */
+  private buildJoinCheer(chatId: string, userId: string, locale: Locale): ServiceCheer | undefined {
+    if (isGuestId(userId)) return undefined;
+
+    const summary = summarizeHistory(this.db.getParticipationHistory(chatId, userId));
+    const cheer = selectJoinCheer(summary, Date.now());
+    if (!cheer) return undefined;
+
+    const mention = userId.split('@')[0] ?? '';
+    if (cheer.key === 'cheerStreak') {
+      return { messageKey: cheer.key, params: [mention, cheer.streak], mentions: [userId] };
+    }
+    if (cheer.key === 'cheerComeback') {
+      return { messageKey: cheer.key, params: [mention, formatAbsenceGap(cheer.gapMs, locale, t)], mentions: [userId] };
+    }
+    return { messageKey: cheer.key, params: [mention], mentions: [userId] };
+  }
+
+  /**
+   * Returns the streak the user stands to lose by withdrawing: the run of past
+   * events they attended plus the event they are pulling out of.
+   */
+  private buildStreakLoss(chatId: string, userId: string): { userId: string; streak: number } | undefined {
+    if (isGuestId(userId)) return undefined;
+
+    const summary = summarizeHistory(this.db.getParticipationHistory(chatId, userId));
+    const streak = summary.currentStreak + 1;
+    if (streak < STREAK_LOSS_MIN) return undefined;
+    return { userId, streak };
+  }
+
+  joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false, locale: Locale = 'en'): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
 
@@ -60,7 +109,7 @@ export class EventService {
     if (existing) {
       if (existing.status === 'pending_promotion') {
         this.db.updateParticipantStatus(event.id, userId, 'joined');
-        return {
+        const result: ServiceResult = {
           success: true,
           messageKey: 'confirmedSpot',
           params: [userId.split('@')[0], event.title],
@@ -68,6 +117,9 @@ export class EventService {
           showStatus: true,
           groupsUpdated: !!event.groups_triggered
         };
+        const cheer = this.buildJoinCheer(chatId, userId, locale);
+        if (cheer) result.cheer = cheer;
+        return result;
       }
       return {
         success: false,
@@ -83,14 +135,19 @@ export class EventService {
     const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
 
     if (!forceWaitlist && joinedCount < event.slots) {
+      // Read history before recording the join: the current event is still
+      // active, so it never appears in history, but keep the order explicit.
+      const cheer = this.buildJoinCheer(chatId, userId, locale);
       this.db.addParticipant(event.id, userId, userName, 'joined', undefined, undefined, 'join');
-      return {
+      const result: ServiceResult = {
         success: true,
         messageKey: 'joined',
         params: [userId.split('@')[0], event.title],
         mentions: [userId],
         showStatus: true
       };
+      if (cheer) result.cheer = cheer;
+      return result;
     } else if (event.waitlist_enabled) {
       this.db.addParticipant(event.id, userId, userName, 'waitlisted', undefined, undefined, forceWaitlist ? 'waitlist' : 'join');
       return {
@@ -176,6 +233,10 @@ export class EventService {
     }
 
     const oldStatus = participant.status;
+    // Only a real spot carries a streak; a waitlisted signup never held one.
+    const streakLoss = oldStatus === 'joined' || oldStatus === 'pending_promotion'
+      ? this.buildStreakLoss(event.chat_id, participant.user_id)
+      : undefined;
     this.db.withdrawParticipant(event.id, participant.user_id);
 
     let messageKey = 'withdrawn';
@@ -195,6 +256,8 @@ export class EventService {
       mentions,
       showStatus: true
     };
+
+    if (streakLoss) result.streakLoss = streakLoss;
 
     if (oldStatus === 'joined' || oldStatus === 'pending_promotion') {
       const next = this.db.getNextInWaitlist(event.id);

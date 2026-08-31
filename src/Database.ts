@@ -30,6 +30,16 @@ export interface Participant {
   joined_at: string;
 }
 
+/** One past event in a group, flagged with whether a given user attended it. */
+export interface ParticipationRow {
+  id: number;
+  occurred_at: string;
+  participated: number;
+}
+
+/** Participant statuses that count as having actually taken part in an event. */
+const ATTENDED_STATUSES = ['joined', 'pending_promotion'] as const;
+
 const CURRENT_SCHEMA_VERSION = 3;
 
 export class DatabaseManager {
@@ -206,6 +216,31 @@ export class DatabaseManager {
 
   getAutoPromotableWaitlist(eventId: number | bigint): Participant[] {
     return this.db.prepare(`SELECT * FROM participants WHERE event_id = ? AND status = 'waitlisted' AND join_source = 'join' ORDER BY joined_at ASC`).all(eventId) as Participant[];
+  }
+
+  /**
+   * Returns one user's attendance history for a group, oldest event first.
+   *
+   * Only concluded events with a scheduled date are history: untimed events are
+   * never auto-concluded, so counting them would read as a missed event forever,
+   * and cancelled events never happened so they cannot break a streak.
+   */
+  getParticipationHistory(chatId: string, userId: string): ParticipationRow[] {
+    const attendedPlaceholders = ATTENDED_STATUSES.map(() => '?').join(', ');
+    return this.db.prepare(`
+      SELECT e.id AS id,
+             e.event_at AS occurred_at,
+             CASE WHEN EXISTS (
+               SELECT 1 FROM participants p
+               WHERE p.event_id = e.id AND p.user_id = ?
+                 AND p.status IN (${attendedPlaceholders})
+             ) THEN 1 ELSE 0 END AS participated
+      FROM events e
+      WHERE e.chat_id = ?
+        AND e.status IN ('concluded', 'completed')
+        AND e.event_at IS NOT NULL
+      ORDER BY e.event_at ASC, e.id ASC
+    `).all(userId, ...ATTENDED_STATUSES, chatId) as ParticipationRow[];
   }
 
   clearDatabase() {
