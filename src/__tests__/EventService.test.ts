@@ -551,3 +551,70 @@ describe('EventService participation cheers', () => {
     expect(result.streakLoss).toBeUndefined();
   });
 });
+
+describe('EventService cheer fixes from review', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'fixes@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const userId = 'user1@s.whatsapp.net';
+  const otherId = 'user2@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  function pastEvent(attended: boolean, weekOffset: number, who = userId) {
+    const eventAt = new Date(Date.UTC(2026, 0, 1) + weekOffset * 7 * 24 * 60 * 60 * 1000).toISOString();
+    const eventId = Number(db.createEvent(chatId, `Week ${weekOffset}`, 10, true, adminId, eventAt, 'UTC'));
+    if (attended) db.addParticipant(eventId, who, who, 'joined');
+    db.concludeEvent(eventId);
+  }
+
+  it('does not repeat the cheer when a user rejoins the same event', () => {
+    pastEvent(true, 0);
+    pastEvent(true, 1);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+
+    expect(service.joinEvent(chatId, userId, 'User One').cheer?.messageKey).toBe('cheerStreak');
+    service.leaveEvent(chatId, userId);
+    expect(service.joinEvent(chatId, userId, 'User One').cheer).toBeUndefined();
+  });
+
+  it('does not repeat the first-timer welcome when a user rejoins', () => {
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    expect(service.joinEvent(chatId, userId, 'User One').cheer?.messageKey).toBe('cheerFirstTime');
+    service.leaveEvent(chatId, userId);
+    expect(service.joinEvent(chatId, userId, 'User One').cheer).toBeUndefined();
+  });
+
+  it('still cheers a different user after someone else rejoins', () => {
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    service.joinEvent(chatId, userId, 'User One');
+    service.leaveEvent(chatId, userId);
+    service.joinEvent(chatId, userId, 'User One');
+
+    expect(service.joinEvent(chatId, otherId, 'User Two').cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('warns the user about their own streak when they leave by index', () => {
+    pastEvent(true, 0);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    service.joinEvent(chatId, userId, 'User One');
+
+    const result = service.leaveByIndex(chatId, userId, false, 1);
+    expect(result.streakLoss).toEqual({ userId, streak: 2 });
+  });
+
+  it('does not warn a member that an admin removed', () => {
+    pastEvent(true, 0);
+    service.createEvent(chatId, 'Test Event', 5, adminId);
+    service.joinEvent(chatId, userId, 'User One');
+
+    const result = service.leaveByIndex(chatId, adminId, true, 1);
+    expect(result.success).toBe(true);
+    expect(result.streakLoss).toBeUndefined();
+  });
+});

@@ -94,6 +94,9 @@ const MONTHS_FROM_WEEKS = 8;
  * Clamped to at least one week: a shorter gap would read as "0 weeks away".
  */
 export function formatAbsenceGap(gapMs: number, locale: Locale, tFn: typeof t): string {
+  // Math.max(1, NaN) is NaN, so an unparseable date would print "NaN weeks".
+  if (!Number.isFinite(gapMs)) return tFn(locale, 'gapWeeks', 1);
+
   const weeks = Math.max(1, Math.floor(gapMs / WEEK_MS));
   if (weeks < MONTHS_FROM_WEEKS) {
     return tFn(locale, 'gapWeeks', weeks);

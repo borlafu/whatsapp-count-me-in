@@ -1,7 +1,7 @@
 import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import type { DatabaseManager } from './Database.js';
-import { t, type Locale } from './i18n.js';
+import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
 import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
@@ -299,7 +299,7 @@ export class CommandHandler {
    * is logged and swallowed rather than allowed to break the command that
    * triggered it — the join or leave itself has already been confirmed.
    */
-  private async sendCheer(chatId: string, sock: WASocket, locale: Locale, messageKey: string, params: any[], mentions: string[]) {
+  private async sendCheer(chatId: string, sock: WASocket, locale: Locale, messageKey: keyof MessageTemplates, params: any[], mentions: string[]) {
     try {
       await sock.sendMessage(chatId, { text: t(locale, messageKey as any, ...params), mentions });
     } catch (err) {

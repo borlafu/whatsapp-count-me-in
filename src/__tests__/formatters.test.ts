@@ -221,3 +221,11 @@ describe('formatAbsenceGap', () => {
     expect(formatAbsenceGap(-5 * WEEK_MS, 'en', t)).toBe('1 week');
   });
 });
+
+describe('formatAbsenceGap with unusable input', () => {
+  it('falls back to the minimum rather than rendering NaN', () => {
+    expect(formatAbsenceGap(NaN, 'es', t)).toBe('1 semana');
+    expect(formatAbsenceGap(NaN, 'en', t)).toBe('1 week');
+    expect(formatAbsenceGap(Infinity, 'en', t)).toBe('1 week');
+  });
+});

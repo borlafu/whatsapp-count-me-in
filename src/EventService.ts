@@ -1,5 +1,5 @@
 import { DatabaseManager, type Participant } from './Database.js';
-import type { Locale } from './i18n.js';
+import type { Locale, MessageTemplates } from './i18n.js';
 import { formatEventDate, formatAbsenceGap } from './formatters.js';
 import { t } from './i18n.js';
 import { summarizeHistory, selectJoinCheer, STREAK_LOSS_MIN } from './participation.js';
@@ -30,8 +30,13 @@ export interface ServiceResult {
   streakLoss?: { userId: string; streak: number };
 }
 
+/**
+ * A cheer names its own template key. Typing the key against MessageTemplates
+ * keeps a typo or a reordered signature a compile error, since CommandHandler
+ * deliberately swallows cheer send failures at runtime.
+ */
 export interface ServiceCheer {
-  messageKey: string;
+  messageKey: keyof MessageTemplates;
   params: any[];
   mentions: string[];
 }
@@ -71,8 +76,15 @@ export class EventService {
    * Builds the cheer for a join that just took a real spot, based on the user's
    * history in this group alone. Returns undefined when the join is unremarkable.
    */
-  private buildJoinCheer(chatId: string, userId: string, locale: Locale): ServiceCheer | undefined {
+  private buildJoinCheer(chatId: string, eventId: number | bigint, userId: string, locale: Locale): ServiceCheer | undefined {
     if (isGuestId(userId)) return undefined;
+
+    // History only covers past events, so it reads the same before and after a
+    // withdrawal from the current one. Without this guard, leaving and rejoining
+    // would replay the cheer, contradicting the streak-lost warning in between.
+    // A user who was only ever waitlisted forfeits their welcome here, which is
+    // far less jarring than being cheered twice for one event.
+    if (this.db.hasWithdrawnParticipant(eventId, userId)) return undefined;
 
     const summary = summarizeHistory(this.db.getParticipationHistory(chatId, userId));
     const cheer = selectJoinCheer(summary, Date.now());
@@ -117,7 +129,7 @@ export class EventService {
           showStatus: true,
           groupsUpdated: !!event.groups_triggered
         };
-        const cheer = this.buildJoinCheer(chatId, userId, locale);
+        const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
         if (cheer) result.cheer = cheer;
         return result;
       }
@@ -137,7 +149,7 @@ export class EventService {
     if (!forceWaitlist && joinedCount < event.slots) {
       // Read history before recording the join: the current event is still
       // active, so it never appears in history, but keep the order explicit.
-      const cheer = this.buildJoinCheer(chatId, userId, locale);
+      const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
       this.db.addParticipant(event.id, userId, userName, 'joined', undefined, undefined, 'join');
       const result: ServiceResult = {
         success: true,
@@ -234,7 +246,10 @@ export class EventService {
 
     const oldStatus = participant.status;
     // Only a real spot carries a streak; a waitlisted signup never held one.
-    const streakLoss = oldStatus === 'joined' || oldStatus === 'pending_promotion'
+    // The warning is second person ("you have lost your streak"), so it is only
+    // for someone who chose to leave — never for a member an admin removed.
+    const isSelfWithdrawal = !requesterId || requesterId === participant.user_id;
+    const streakLoss = isSelfWithdrawal && (oldStatus === 'joined' || oldStatus === 'pending_promotion')
       ? this.buildStreakLoss(event.chat_id, participant.user_id)
       : undefined;
     this.db.withdrawParticipant(event.id, participant.user_id);

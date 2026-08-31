@@ -1,6 +1,6 @@
 export type Locale = 'en' | 'es';
 
-interface MessageTemplates {
+export interface MessageTemplates {
   // Admin
   adminOnly: () => string;
 
