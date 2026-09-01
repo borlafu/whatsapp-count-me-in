@@ -351,3 +351,40 @@ describe('DatabaseManager schema v4 migration', () => {
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
   });
 });
+
+describe('DatabaseManager getParticipationHistory status filter', () => {
+  const chatId = 'statuses@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+
+  /** Inserts an event, signs Ana up, then forces an arbitrary event status. */
+  function eventWithStatus(db: DatabaseManager, status: string, eventAt: string): number {
+    const id = Number(db.createEvent(chatId, `Event ${status}`, 10, true, adminId, eventAt, 'UTC'));
+    db.addParticipant(id, ana, 'Ana', 'joined');
+    (db as any).db.prepare('UPDATE events SET status = ? WHERE id = ?').run(status, id);
+    return id;
+  }
+
+  it('counts concluded events only', () => {
+    const db = new DatabaseManager(':memory:');
+    eventWithStatus(db, 'concluded', '2026-01-01T18:00:00.000Z');
+    eventWithStatus(db, 'active', '2026-01-08T18:00:00.000Z');
+    eventWithStatus(db, 'cancelled', '2026-01-15T18:00:00.000Z');
+
+    const rows = db.getParticipationHistory(chatId, ana);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.occurred_at).toBe('2026-01-01T18:00:00.000Z');
+    db.close();
+  });
+
+  it('ignores an unrecognised status rather than guessing', () => {
+    // 'completed' was in the status type since the first commit but was never
+    // written by any version, so history no longer looks for it. A row carrying
+    // it could only come from outside the app, and is treated as not concluded.
+    const db = new DatabaseManager(':memory:');
+    eventWithStatus(db, 'completed', '2026-01-01T18:00:00.000Z');
+
+    expect(db.getParticipationHistory(chatId, ana)).toEqual([]);
+    db.close();
+  });
+});
