@@ -150,7 +150,9 @@ export class CommandHandler {
     }
 
     const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin);
-    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+    // Render with the locale the service used, not the snapshot taken before
+    // the admin lookup awaited, so the whole reply is in one language.
+    await this.safeReply(msg, chatId, sock, t(result.locale ?? locale, result.messageKey as any, ...(result.params || [])));
   }
 
   private async handleReschedule(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
@@ -176,7 +178,7 @@ export class CommandHandler {
     }
 
     const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin);
-    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+    await this.safeReply(msg, chatId, sock, t(result.locale ?? locale, result.messageKey as any, ...(result.params || [])));
   }
 
   private async handleReminders(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
@@ -197,18 +199,19 @@ export class CommandHandler {
 
   private async executeJoin(msg: WAMessage, chatId: string, targetUserId: string, targetUserName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
     const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist);
+    const replyLocale = result.locale ?? locale;
     if (!result.success && result.messageKey === 'noActiveEvent') {
-      return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
+      return await this.safeReply(msg, chatId, sock, t(replyLocale, 'noActiveEvent'));
     }
 
     if (result.showStatus) {
-      await this.handleStatus(msg, chatId, sock, locale);
+      await this.handleStatus(msg, chatId, sock, replyLocale);
     } else {
-      await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+      await this.safeReply(msg, chatId, sock, t(replyLocale, result.messageKey as any, ...(result.params || [])));
     }
 
     if (result.cheer) {
-      await this.sendCheer(chatId, sock, locale, result.cheer.messageKey, result.cheer.params, result.cheer.mentions);
+      await this.sendCheer(chatId, sock, replyLocale, result.cheer.messageKey, result.cheer.params, result.cheer.mentions);
     }
 
     if (result.groupsUpdated) {

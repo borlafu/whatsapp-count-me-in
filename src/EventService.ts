@@ -26,6 +26,15 @@ export interface ServiceResult {
   };
   promotions?: Array<{ userId: string; userName: string }>;
   data?: StatusData;
+  /**
+   * The locale this result was built with, when the method resolved one.
+   *
+   * The handler renders with this rather than its own snapshot. Both read the
+   * same chat setting, but a !lang command arriving in another batch during an
+   * awaited group-metadata lookup can change it in between, which would
+   * otherwise split a single reply across two languages.
+   */
+  locale?: Locale;
   cheer?: ServiceCheer;
   streakLoss?: { userId: string; streak: number };
 }
@@ -53,25 +62,25 @@ export class EventService {
     const locale = this.db.getLocale(chatId);
     const existing = this.db.getActiveEvent(chatId);
     if (existing) {
-      return { success: false, messageKey: 'activeEventExists' };
+      return { success: false, messageKey: 'activeEventExists', locale };
     }
 
     this.db.createEvent(chatId, title, slots, true, userId, eventAt, timezone, closeAndGroupOffsetMin);
 
     if (eventAt && timezone) {
       const dateStr = formatEventDate(eventAt, timezone, locale);
-      return { success: true, messageKey: 'eventScheduled', params: [title, slots, dateStr] };
+      return { success: true, messageKey: 'eventScheduled', params: [title, slots, dateStr], locale };
     }
-    return { success: true, messageKey: 'eventCreated', params: [title, slots] };
+    return { success: true, messageKey: 'eventCreated', params: [title, slots], locale };
   }
 
   rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number): ServiceResult {
     const locale = this.db.getLocale(chatId);
     const event = this.db.getActiveEvent(chatId);
-    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+    if (!event) return { success: false, messageKey: 'noActiveEvent', locale };
     this.db.updateEventSchedule(event.id, eventAt, timezone, closeAndGroupOffsetMin);
     const dateStr = formatEventDate(eventAt, timezone, locale);
-    return { success: true, messageKey: 'eventRescheduled', params: [dateStr] };
+    return { success: true, messageKey: 'eventRescheduled', params: [dateStr], locale };
   }
 
   /**
@@ -117,7 +126,7 @@ export class EventService {
   joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false): ServiceResult {
     const locale = this.db.getLocale(chatId);
     const event = this.db.getActiveEvent(chatId);
-    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+    if (!event) return { success: false, messageKey: 'noActiveEvent', locale };
 
     const existing = this.db.getParticipant(event.id, userId);
     if (existing) {
@@ -129,7 +138,8 @@ export class EventService {
           params: [userId.split('@')[0], event.title],
           mentions: [userId],
           showStatus: true,
-          groupsUpdated: !!event.groups_triggered
+          groupsUpdated: !!event.groups_triggered,
+          locale
         };
         const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
         if (cheer) {
@@ -140,12 +150,13 @@ export class EventService {
       }
       return {
         success: false,
-        messageKey: existing.status === 'joined' ? 'alreadyJoined' : 'alreadyWaitlisted'
+        messageKey: existing.status === 'joined' ? 'alreadyJoined' : 'alreadyWaitlisted',
+        locale
       };
     }
 
     if (event.groups_triggered) {
-      return { success: false, messageKey: 'registrationsClosed' };
+      return { success: false, messageKey: 'registrationsClosed', locale };
     }
 
     const participants = this.db.getParticipants(event.id);
@@ -161,7 +172,8 @@ export class EventService {
         messageKey: 'joined',
         params: [userId.split('@')[0], event.title],
         mentions: [userId],
-        showStatus: true
+        showStatus: true,
+        locale
       };
       if (cheer) {
         this.db.markCheerResolved(event.id, userId);
@@ -175,10 +187,11 @@ export class EventService {
         messageKey: 'joinedWaitlist',
         params: [userId.split('@')[0], event.title],
         mentions: [userId],
-        showStatus: true
+        showStatus: true,
+        locale
       };
     } else {
-      return { success: false, messageKey: 'eventFullNoWaitlist' };
+      return { success: false, messageKey: 'eventFullNoWaitlist', locale };
     }
   }
 

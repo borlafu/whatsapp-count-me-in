@@ -1125,3 +1125,47 @@ describe('CommandHandler !conclude', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('CommandHandler renders a reply in one language', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+  let handler: CommandHandler;
+
+  const chatId = '12345@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+
+  const adminMsg = (text: string): any => ({
+    key: { remoteJid: chatId, fromMe: false, participant: adminId },
+    message: { conversation: text },
+    pushName: 'Admin User'
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+    handler = new CommandHandler(service, db);
+  });
+
+  it('does not mix languages when the locale changes mid-command', async () => {
+    // isAdmin awaits a network round trip. A !lang command arriving in another
+    // batch during that await changes the stored locale, so the handler's
+    // snapshot and the service's own read can disagree, splitting one reply
+    // across two languages.
+    const racingSock: any = {
+      user: { id: adminId },
+      sendMessage: vi.fn(),
+      groupMetadata: vi.fn().mockImplementation(async () => {
+        db.setLocale(chatId, 'es');
+        return { participants: [{ id: adminId, admin: 'admin' }] };
+      })
+    };
+
+    await handler.handleCommand(adminMsg('!create "Partido" 12 2026-09-07 19:00 Europe/Madrid'), racingSock);
+
+    const text = racingSock.sendMessage.mock.calls[0][1].text as string;
+    const hasSpanish = text.includes('Plazas') || text.includes('septiembre');
+    const hasEnglish = text.includes('Slots') || text.includes('September');
+    expect(hasSpanish && hasEnglish).toBe(false);
+  });
+});
