@@ -102,6 +102,8 @@ describe('DatabaseManager getParticipationHistory', () => {
   });
 
   it('counts a pending promotion as attendance but not a waitlist spot', () => {
+    // The pending row counts because concludeEvent settles it as joined, not
+    // because history treats pending_promotion as attendance.
     const db = new DatabaseManager(':memory:');
     concludedEvent(db, chatId, 'Pending', '2026-01-01T18:00:00.000Z', [[userId, 'pending_promotion']]);
     concludedEvent(db, chatId, 'Waitlisted', '2026-01-08T18:00:00.000Z', [[userId, 'waitlisted']]);
@@ -164,6 +166,79 @@ describe('DatabaseManager getParticipationHistory', () => {
     const rows = db.getParticipationHistory(chatId, userId);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.participated).toBe(1);
+    db.close();
+  });
+});
+
+describe('DatabaseManager concludeEvent settles pending promotions', () => {
+  const chatId = 'settle@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  function statusOf(db: DatabaseManager, eventId: number, userId: string): string | undefined {
+    const row = (db as any).db
+      .prepare('SELECT status FROM participants WHERE event_id = ? AND user_id = ?')
+      .get(eventId, userId) as { status: string } | undefined;
+    return row?.status;
+  }
+
+  it('settles a kept promotion as joined', () => {
+    // Ana was offered a freed spot and never declined it, so she kept it: she
+    // held a slot nobody else could take, was listed as a participant and was
+    // drawn into the teams. Attendance history must agree with that.
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(eventId, ana, 'Ana', 'pending_promotion');
+
+    db.concludeEvent(eventId);
+
+    expect(statusOf(db, eventId, ana)).toBe('joined');
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([1]);
+    db.close();
+  });
+
+  it('leaves other statuses alone', () => {
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(eventId, ana, 'Ana', 'waitlisted');
+    db.addParticipant(eventId, bob, 'Bob', 'withdrawn');
+
+    db.concludeEvent(eventId);
+
+    expect(statusOf(db, eventId, ana)).toBe('waitlisted');
+    expect(statusOf(db, eventId, bob)).toBe('withdrawn');
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([0]);
+    expect(db.getParticipationHistory(chatId, bob).map(r => r.participated)).toEqual([0]);
+    db.close();
+  });
+
+  it('does not touch pending promotions on other events', () => {
+    const db = new DatabaseManager(':memory:');
+    const done = Number(db.createEvent(chatId, 'Done', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    const open = Number(db.createEvent(chatId, 'Open', 10, true, adminId, '2026-02-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(done, ana, 'Ana', 'pending_promotion');
+    db.addParticipant(open, ana, 'Ana', 'pending_promotion');
+
+    db.concludeEvent(done);
+
+    expect(statusOf(db, done, ana)).toBe('joined');
+    expect(statusOf(db, open, ana)).toBe('pending_promotion');
+    db.close();
+  });
+
+  it('leaves a declined promotion out of history', () => {
+    // Declining turns the row into withdrawn before the event concludes, so
+    // there is nothing left to settle.
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 10, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    db.addParticipant(eventId, ana, 'Ana', 'pending_promotion');
+    db.withdrawParticipant(eventId, ana);
+
+    db.concludeEvent(eventId);
+
+    expect(statusOf(db, eventId, ana)).toBe('withdrawn');
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([0]);
     db.close();
   });
 });
