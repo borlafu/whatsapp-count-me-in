@@ -777,3 +777,164 @@ describe('EventService promotions and attendance history', () => {
     expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([0]);
   });
 });
+
+describe('EventService cheers at most once per event', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'once@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  it('welcomes a user whose waitlist place was withdrawn before they got a spot', () => {
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    // Ana is waitlisted, which is not a spot and earns no cheer.
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+    service.leaveEvent(chatId, ana);
+    service.leaveEvent(chatId, bob);
+
+    // Now she takes a real spot for the first time, so the welcome is due.
+    const rejoin = service.joinEvent(chatId, ana, 'Ana');
+    expect(rejoin.messageKey).toBe('joined');
+    expect(rejoin.cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('does not repeat a cheer the user already received for this event', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
+    service.leaveEvent(chatId, ana);
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+
+  it('does not repeat a cheer across several leave and rejoin cycles', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    for (let i = 0; i < 3; i++) {
+      service.leaveEvent(chatId, ana);
+      expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+    }
+  });
+
+  it('cheers a promotion the user confirms, having never been cheered before', () => {
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');   // waitlisted, no cheer
+    service.leaveEvent(chatId, bob);          // Ana promoted to pending
+
+    const confirm = service.joinEvent(chatId, ana, 'Ana');
+    expect(confirm.messageKey).toBe('confirmedSpot');
+    expect(confirm.cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('does not suppress another user\'s cheer', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    service.leaveEvent(chatId, ana);
+    service.joinEvent(chatId, ana, 'Ana');
+
+    expect(service.joinEvent(chatId, bob, 'Bob').cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('settles per event, so a later event can cheer the same user again', () => {
+    // First event: Ana is welcomed, which settles her cheer for that event.
+    const first = Number(db.createEvent(chatId, 'First', 5, true, adminId, '2026-01-01T18:00:00.000Z', 'UTC'));
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
+    expect(db.isCheerResolved(first, ana)).toBe(true);
+    db.concludeEvent(first);
+
+    // Three events she misses, so the next join is a comeback.
+    for (const week of [1, 2, 3]) {
+      const at = new Date(Date.UTC(2026, 0, 1) + week * 7 * 86_400_000).toISOString();
+      db.concludeEvent(Number(db.createEvent(chatId, `Week ${week}`, 5, true, adminId, at, 'UTC')));
+    }
+
+    // A fresh event carries no settlement, so the comeback cheer is due.
+    service.createEvent(chatId, 'Later', 5, adminId);
+    const later = db.getActiveEvent(chatId)!;
+    expect(db.isCheerResolved(later.id, ana)).toBe(false);
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerComeback');
+  });
+});
+
+describe('EventService never contradicts a streak-lost warning', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'contra@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  function anaAttended(weeks: number[]) {
+    for (const w of weeks) {
+      const at = new Date(Date.UTC(2026, 0, 1) + w * 7 * 86_400_000).toISOString();
+      const id = Number(db.createEvent(chatId, `Week ${w}`, 10, true, adminId, at, 'UTC'));
+      db.addParticipant(id, ana, 'Ana', 'joined');
+      db.concludeEvent(id);
+    }
+  }
+
+  it('stays silent when a declined promotion is taken up again', () => {
+    // Giving up a real spot resolves the cheer for this event, even though no
+    // cheer text was ever produced: she was warned about losing the streak, so
+    // celebrating the same streak moments later is nonsense.
+    anaAttended([0, 1]);
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');
+    service.leaveEvent(chatId, bob);
+
+    const left = service.leaveEvent(chatId, ana);
+    expect(left.streakLoss).toEqual({ userId: ana, streak: 3 });
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+
+  it('stays silent when a joined spot is given up and retaken', () => {
+    anaAttended([0, 1]);
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    const left = service.leaveEvent(chatId, ana);
+    expect(left.streakLoss).toEqual({ userId: ana, streak: 3 });
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+
+  it('stays silent after an admin removes someone who held a spot', () => {
+    // No warning is sent in this case, but the spot was still held and given
+    // up, so a rejoin should not celebrate it either.
+    anaAttended([0, 1]);
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    service.leaveByIndex(chatId, adminId, true, 1);
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+
+  it('still welcomes someone who only ever gave up a waitlist place', () => {
+    // A waitlist place is not a spot, so nothing was resolved and no warning
+    // was sent. This is the case #90 was about.
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    const waitlisted = service.joinEvent(chatId, ana, 'Ana');
+    expect(waitlisted.messageKey).toBe('joinedWaitlist');
+    const left = service.leaveEvent(chatId, ana);
+    expect(left.streakLoss).toBeUndefined();
+    service.leaveEvent(chatId, bob);
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
+  });
+});
