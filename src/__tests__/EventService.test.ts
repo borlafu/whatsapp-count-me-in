@@ -1010,3 +1010,61 @@ describe('EventService resolves the locale from the chat', () => {
     expect(String(cheer!.params[1])).toMatch(/semanas?|meses|mes/);
   });
 });
+
+describe('EventService cheers a promotion only when it is confirmed', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'promocheer@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  it('cheers a promotion the user confirms', () => {
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');   // waitlisted
+    service.leaveEvent(chatId, bob);          // Ana offered the freed spot
+
+    const confirm = service.joinEvent(chatId, ana, 'Ana');
+    expect(confirm.messageKey).toBe('confirmedSpot');
+    expect(confirm.cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('does not cheer a waitlister moved in by an upsize', () => {
+    // Nobody confirms an upsize: they are moved in without being asked, so
+    // there is no moment that belongs to them to celebrate. Missing the cheer
+    // here is intended, not an oversight.
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');
+
+    const resized = service.resizeEvent(chatId, 5);
+
+    expect(resized.promotions).toEqual([{ userId: ana, userName: 'Ana' }]);
+    expect(resized.cheer).toBeUndefined();
+    const event = db.getActiveEvent(chatId)!;
+    expect(db.getParticipant(event.id, ana)?.status).toBe('joined');
+  });
+
+  it('leaves an upsized spot unsettled, so giving it up still settles normally', () => {
+    // The upsize itself records nothing, but withdrawing from the spot does,
+    // which is what stops a rejoin celebrating a streak the user was just
+    // warned about losing.
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');
+    service.resizeEvent(chatId, 5);
+    const event = db.getActiveEvent(chatId)!;
+    expect(db.isCheerResolved(event.id, ana)).toBe(false);
+
+    service.leaveEvent(chatId, ana);
+    expect(db.isCheerResolved(event.id, ana)).toBe(true);
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+});

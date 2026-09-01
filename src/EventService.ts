@@ -345,7 +345,11 @@ export class EventService {
 
     this.db.updateEventSlots(event.id, newSlots);
 
-    // Upsize: auto-promote eligible waitlisters (join_source = 'join') up to the new available slots
+    // Upsize: auto-promote eligible waitlisters (join_source = 'join') up to the new available slots.
+    // These promotions deliberately do not cheer. A cheer belongs to someone who
+    // chose to take a spot, and nobody confirms an upsize: they are moved in
+    // without asking. A promotion the user does confirm is cheered by joinEvent's
+    // confirmedSpot branch instead. Missing the cheer here is accepted.
     const availableSlots = newSlots - joined.length;
     if (availableSlots > 0) {
       const promotable = this.db.getAutoPromotableWaitlist(event.id).slice(0, availableSlots);
