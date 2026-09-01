@@ -37,8 +37,14 @@ export interface ParticipationRow {
   participated: number;
 }
 
-/** Participant statuses that count as having actually taken part in an event. */
-const ATTENDED_STATUSES = ['joined', 'pending_promotion'] as const;
+/**
+ * Participant statuses that count as having actually taken part in an event.
+ *
+ * Only a confirmed spot counts. `pending_promotion` is not listed because it
+ * cannot survive an event being concluded: `concludeEvent` settles any kept
+ * promotion as `joined` first, so the ambiguous state never reaches history.
+ */
+const ATTENDED_STATUSES = ['joined'] as const;
 
 const CURRENT_SCHEMA_VERSION = 3;
 
@@ -212,8 +218,23 @@ export class DatabaseManager {
     return this.db.prepare(`UPDATE events SET status = 'cancelled' WHERE id = ?`).run(eventId);
   }
 
+  /**
+   * Concludes an event, settling any kept promotion as a confirmed spot first.
+   *
+   * A `pending_promotion` participant was offered a freed spot and never
+   * declined it, so they kept it: the slot was counted against the event's
+   * capacity, they were listed among the participants, and `makeGroups` drew
+   * them into the teams. Declining turns the row into `withdrawn` instead, so
+   * anything still pending when the event ends really did take part. Settling
+   * it here keeps attendance history consistent with what the bot did, rather
+   * than leaving an ambiguous state for every reader to reinterpret.
+   */
   concludeEvent(eventId: number | bigint) {
-    return this.db.prepare(`UPDATE events SET status = 'concluded' WHERE id = ?`).run(eventId);
+    const settleAndConclude = this.db.transaction((id: number | bigint) => {
+      this.db.prepare(`UPDATE participants SET status = 'joined' WHERE event_id = ? AND status = 'pending_promotion'`).run(id);
+      return this.db.prepare(`UPDATE events SET status = 'concluded' WHERE id = ?`).run(id);
+    });
+    return settleAndConclude(eventId);
   }
 
   updateEventSlots(eventId: number | bigint, slots: number) {

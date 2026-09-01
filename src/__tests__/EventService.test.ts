@@ -680,3 +680,100 @@ describe('EventService concludeEvent guards the scheduled time', () => {
     expect(rows.every(r => r.participated === 1)).toBe(true);
   });
 });
+
+describe('EventService promotions and attendance history', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'promo@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  /** Gives Ana a run of attended events, oldest first. */
+  function anaAttended(weeks: number[]) {
+    for (const w of weeks) {
+      const at = new Date(Date.UTC(2026, 0, 1) + w * 7 * 86_400_000).toISOString();
+      const id = Number(db.createEvent(chatId, `Week ${w}`, 10, true, adminId, at, 'UTC'));
+      db.addParticipant(id, ana, 'Ana', 'joined');
+      db.concludeEvent(id);
+    }
+  }
+
+  /**
+   * Drives a one-slot event to the point where Ana holds a pending promotion.
+   * The event is dated just in the past so it is eligible to be concluded and
+   * counts towards history, which ignores undated events.
+   */
+  function anaPending(): void {
+    service.createEvent(chatId, 'This Week', 1, adminId, new Date(Date.now() - 60_000).toISOString(), 'UTC');
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');
+    service.leaveEvent(chatId, bob);
+    const event = db.getActiveEvent(chatId)!;
+    expect(db.getParticipant(event.id, ana)?.status).toBe('pending_promotion');
+  }
+
+  it('counts a promotion the user never answered, because they kept the spot', () => {
+    anaPending();
+    service.concludeEvent(chatId);
+
+    // She held the only slot, appeared in the participant list and would have
+    // been drawn into the teams, so history must say she took part.
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([1]);
+  });
+
+  it('does not re-welcome someone whose spot came from an unanswered promotion', () => {
+    anaPending();
+    service.concludeEvent(chatId);
+
+    service.createEvent(chatId, 'Next Week', 10, adminId);
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).not.toBe('cheerFirstTime');
+  });
+
+  it('keeps a streak alive through an unanswered promotion', () => {
+    anaAttended([0, 1]);
+    anaPending();
+    service.concludeEvent(chatId);
+
+    // Three attended events behind her, so the next join is the fourth: past
+    // the milestone, and crucially not a broken run.
+    const rows = db.getParticipationHistory(chatId, ana);
+    expect(rows.map(r => r.participated)).toEqual([1, 1, 1]);
+  });
+
+  it('counts a promotion the user confirmed via the pending path', () => {
+    anaAttended([0, 1]);
+    anaPending();
+
+    // Exercise the confirm branch: joining while pending returns confirmedSpot.
+    const confirm = service.joinEvent(chatId, ana, 'Ana');
+    expect(confirm.messageKey).toBe('confirmedSpot');
+    service.concludeEvent(chatId);
+
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([1, 1, 1]);
+  });
+
+  it('warns a declining user about the streak the kept spot would have extended', () => {
+    anaAttended([0, 1]);
+    anaPending();
+
+    // Keeping the spot would have settled as a third attendance, so declining
+    // really does cost her a streak of 3.
+    const result = service.leaveEvent(chatId, ana);
+    expect(result.streakLoss).toEqual({ userId: ana, streak: 3 });
+  });
+
+  it('drops a declined promotion out of history entirely', () => {
+    anaPending();
+    service.leaveEvent(chatId, ana);
+    service.concludeEvent(chatId);
+
+    expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([0]);
+  });
+});
