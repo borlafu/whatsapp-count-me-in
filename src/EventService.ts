@@ -82,9 +82,7 @@ export class EventService {
     // History only covers past events, so it reads the same before and after a
     // withdrawal from the current one. Without this guard, leaving and rejoining
     // would replay the cheer, contradicting the streak-lost warning in between.
-    // A user who was only ever waitlisted forfeits their welcome here, which is
-    // far less jarring than being cheered twice for one event.
-    if (this.db.hasWithdrawnParticipant(eventId, userId)) return undefined;
+    if (this.db.hasBeenCheered(eventId, userId)) return undefined;
 
     const summary = summarizeHistory(this.db.getParticipationHistory(chatId, userId));
     const cheer = selectJoinCheer(summary, Date.now());
@@ -130,7 +128,10 @@ export class EventService {
           groupsUpdated: !!event.groups_triggered
         };
         const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
-        if (cheer) result.cheer = cheer;
+        if (cheer) {
+          this.db.markCheered(event.id, userId);
+          result.cheer = cheer;
+        }
         return result;
       }
       return {
@@ -147,8 +148,8 @@ export class EventService {
     const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
 
     if (!forceWaitlist && joinedCount < event.slots) {
-      // Read history before recording the join: the current event is still
-      // active, so it never appears in history, but keep the order explicit.
+      // Build the cheer before inserting, so hasBeenCheered is read against the
+      // rows that existed before this join, then record it against the new row.
       const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
       this.db.addParticipant(event.id, userId, userName, 'joined', undefined, undefined, 'join');
       const result: ServiceResult = {
@@ -158,7 +159,10 @@ export class EventService {
         mentions: [userId],
         showStatus: true
       };
-      if (cheer) result.cheer = cheer;
+      if (cheer) {
+        this.db.markCheered(event.id, userId);
+        result.cheer = cheer;
+      }
       return result;
     } else if (event.waitlist_enabled) {
       this.db.addParticipant(event.id, userId, userName, 'waitlisted', undefined, undefined, forceWaitlist ? 'waitlist' : 'join');

@@ -28,6 +28,7 @@ export interface Participant {
   invited_by?: string;
   invited_by_name?: string;
   joined_at: string;
+  cheered_at?: string;
 }
 
 /** One past event in a group, flagged with whether a given user attended it. */
@@ -46,7 +47,7 @@ export interface ParticipationRow {
  */
 const ATTENDED_STATUSES = ['joined'] as const;
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 export class DatabaseManager {
   private db: Database.Database;
@@ -121,6 +122,10 @@ export class DatabaseManager {
 
     if (version < 3) {
       this.db.exec(`ALTER TABLE participants ADD COLUMN join_source TEXT;`);
+    }
+
+    if (version < 4) {
+      this.db.exec(`ALTER TABLE participants ADD COLUMN cheered_at TEXT;`);
     }
 
     this.db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
@@ -203,11 +208,26 @@ export class DatabaseManager {
     return this.db.prepare(`UPDATE participants SET status = ? WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`).run(status, eventId, userId);
   }
 
-  /** True when the user already signed up for this event and pulled out again. */
-  hasWithdrawnParticipant(eventId: number | bigint, userId: string): boolean {
-    const row = this.db.prepare(`SELECT 1 FROM participants WHERE event_id = ? AND user_id = ? AND status = 'withdrawn' LIMIT 1`)
-      .get(eventId, userId);
+  /**
+   * True when this user has already been cheered for this event.
+   *
+   * Checked across every row the user has for the event, including withdrawn
+   * ones, because leaving and rejoining inserts a fresh row. Recording the
+   * answer directly beats inferring it from a withdrawal: a withdrawn row does
+   * not say whether the spot it held was a real one or only a waitlist place.
+   */
+  hasBeenCheered(eventId: number | bigint, userId: string): boolean {
+    const row = this.db.prepare(
+      `SELECT 1 FROM participants WHERE event_id = ? AND user_id = ? AND cheered_at IS NOT NULL LIMIT 1`
+    ).get(eventId, userId);
     return row !== undefined;
+  }
+
+  /** Records that this user has now been cheered for this event. */
+  markCheered(eventId: number | bigint, userId: string): void {
+    this.db.prepare(
+      `UPDATE participants SET cheered_at = ? WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`
+    ).run(new Date().toISOString(), eventId, userId);
   }
 
   withdrawParticipant(eventId: number | bigint, userId: string) {

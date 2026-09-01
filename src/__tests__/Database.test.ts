@@ -242,3 +242,105 @@ describe('DatabaseManager concludeEvent settles pending promotions', () => {
     db.close();
   });
 });
+
+describe('DatabaseManager cheer tracking', () => {
+  const chatId = 'cheered@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  it('reports no cheer before one is recorded', () => {
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
+    db.addParticipant(eventId, ana, 'Ana', 'joined');
+
+    expect(db.hasBeenCheered(eventId, ana)).toBe(false);
+    db.close();
+  });
+
+  it('remembers a recorded cheer', () => {
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
+    db.addParticipant(eventId, ana, 'Ana', 'joined');
+
+    db.markCheered(eventId, ana);
+
+    expect(db.hasBeenCheered(eventId, ana)).toBe(true);
+    db.close();
+  });
+
+  it('remembers the cheer after the user withdraws and rejoins', () => {
+    // Rejoining inserts a fresh row, so the lookup has to span withdrawn rows.
+    const db = new DatabaseManager(':memory:');
+    const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
+    db.addParticipant(eventId, ana, 'Ana', 'joined');
+    db.markCheered(eventId, ana);
+    db.withdrawParticipant(eventId, ana);
+    db.addParticipant(eventId, ana, 'Ana', 'joined');
+
+    expect(db.hasBeenCheered(eventId, ana)).toBe(true);
+    db.close();
+  });
+
+  it('keeps cheer records separate per user and per event', () => {
+    const db = new DatabaseManager(':memory:');
+    const first = Number(db.createEvent(chatId, 'First', 5, true, adminId));
+    db.addParticipant(first, ana, 'Ana', 'joined');
+    db.addParticipant(first, bob, 'Bob', 'joined');
+    db.concludeEvent(first);
+    const second = Number(db.createEvent(chatId, 'Second', 5, true, adminId));
+    db.addParticipant(second, ana, 'Ana', 'joined');
+
+    db.markCheered(first, ana);
+
+    expect(db.hasBeenCheered(first, ana)).toBe(true);
+    expect(db.hasBeenCheered(first, bob)).toBe(false);
+    expect(db.hasBeenCheered(second, ana)).toBe(false);
+    db.close();
+  });
+});
+
+describe('DatabaseManager schema v4 migration', () => {
+  const testDbPath = path.join(process.cwd(), 'test-migration-v4.db');
+
+  it('adds cheered_at to a database created before the column existed', () => {
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+
+    // A v3 database: every earlier migration applied, but no cheered_at.
+    const legacyDb = new Database(testDbPath);
+    legacyDb.exec(`
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, title TEXT NOT NULL,
+        slots INTEGER NOT NULL, waitlist_enabled INTEGER DEFAULT 1, created_by TEXT NOT NULL,
+        status TEXT DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        event_at TEXT, timezone TEXT, close_and_group_offset_min INTEGER,
+        groups_triggered INTEGER DEFAULT 0, last_reminder_date TEXT
+      );
+      CREATE TABLE participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL, status TEXT NOT NULL,
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        invited_by TEXT, invited_by_name TEXT, join_source TEXT
+      );
+      CREATE TABLE chat_settings (
+        chat_id TEXT PRIMARY KEY, locale TEXT NOT NULL DEFAULT 'en', reminders_enabled INTEGER DEFAULT 1
+      );
+      INSERT INTO meta (key, value) VALUES ('schema_version', '3');
+    `);
+    legacyDb.exec(`INSERT INTO events (chat_id, title, slots, created_by) VALUES ('c@g.us', 'Legacy', 5, 'a@s.whatsapp.net');`);
+    legacyDb.exec(`INSERT INTO participants (event_id, user_id, user_name, status) VALUES (1, 'ana@s.whatsapp.net', 'Ana', 'joined');`);
+    legacyDb.close();
+
+    const dbManager = new DatabaseManager(testDbPath);
+
+    const columns = ((dbManager as any).db.prepare('PRAGMA table_info(participants)').all() as any[]).map(c => c.name);
+    expect(columns).toContain('cheered_at');
+
+    // The existing participant carries no cheer record, so a cheer is still due.
+    expect(dbManager.hasBeenCheered(1, 'ana@s.whatsapp.net')).toBe(false);
+
+    dbManager.close();
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+  });
+});

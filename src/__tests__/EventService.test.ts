@@ -777,3 +777,82 @@ describe('EventService promotions and attendance history', () => {
     expect(db.getParticipationHistory(chatId, ana).map(r => r.participated)).toEqual([0]);
   });
 });
+
+describe('EventService cheers at most once per event', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'once@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+  const bob = 'bob@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  it('welcomes a user whose waitlist place was withdrawn before they got a spot', () => {
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    // Ana is waitlisted, which is not a spot and earns no cheer.
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+    service.leaveEvent(chatId, ana);
+    service.leaveEvent(chatId, bob);
+
+    // Now she takes a real spot for the first time, so the welcome is due.
+    const rejoin = service.joinEvent(chatId, ana, 'Ana');
+    expect(rejoin.messageKey).toBe('joined');
+    expect(rejoin.cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('does not repeat a cheer the user already received for this event', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
+    service.leaveEvent(chatId, ana);
+
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+  });
+
+  it('does not repeat a cheer across several leave and rejoin cycles', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    for (let i = 0; i < 3; i++) {
+      service.leaveEvent(chatId, ana);
+      expect(service.joinEvent(chatId, ana, 'Ana').cheer).toBeUndefined();
+    }
+  });
+
+  it('cheers a promotion the user confirms, having never been cheered before', () => {
+    service.createEvent(chatId, 'One Slot', 1, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    service.joinEvent(chatId, ana, 'Ana');   // waitlisted, no cheer
+    service.leaveEvent(chatId, bob);          // Ana promoted to pending
+
+    const confirm = service.joinEvent(chatId, ana, 'Ana');
+    expect(confirm.messageKey).toBe('confirmedSpot');
+    expect(confirm.cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('tracks cheers per user, not per event', () => {
+    service.createEvent(chatId, 'Open', 5, adminId);
+    service.joinEvent(chatId, ana, 'Ana');
+    service.leaveEvent(chatId, ana);
+    service.joinEvent(chatId, ana, 'Ana');
+
+    expect(service.joinEvent(chatId, bob, 'Bob').cheer?.messageKey).toBe('cheerFirstTime');
+  });
+
+  it('tracks cheers per event, so the next event cheers again', () => {
+    const past = new Date(Date.now() - 60_000).toISOString();
+    service.createEvent(chatId, 'First', 5, adminId, past, 'UTC');
+    expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
+    service.concludeEvent(chatId);
+
+    // Second event: she is no longer a first timer, but a fresh event means the
+    // per-event cheer record starts empty again.
+    service.createEvent(chatId, 'Second', 5, adminId);
+    service.joinEvent(chatId, bob, 'Bob');
+    expect(service.joinEvent(chatId, bob, 'Bob').cheer).toBeUndefined();
+  });
+});
