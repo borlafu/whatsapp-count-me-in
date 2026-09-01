@@ -938,3 +938,75 @@ describe('EventService never contradicts a streak-lost warning', () => {
     expect(service.joinEvent(chatId, ana, 'Ana').cheer?.messageKey).toBe('cheerFirstTime');
   });
 });
+
+describe('EventService resolves the locale from the chat', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'locale@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const ana = 'ana@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  // No caller passes a locale to these methods: it is chat state, read from the
+  // database, so there is no argument for a caller to forget. This is what the
+  // Spanish-event-with-an-English-date bug came down to.
+
+  it('formats a created event date in the chat language', () => {
+    db.setLocale(chatId, 'es');
+    const result = service.createEvent(chatId, 'Partido', 12, adminId, '2026-09-07T17:00:00.000Z', 'Europe/Madrid');
+
+    expect(result.messageKey).toBe('eventScheduled');
+    const dateStr = String(result.params![2]);
+    expect(dateStr).toContain('septiembre');
+    expect(dateStr).not.toContain('September');
+  });
+
+  it('formats a created event date in English for an English chat', () => {
+    const result = service.createEvent(chatId, 'Match', 12, adminId, '2026-09-07T17:00:00.000Z', 'Europe/Madrid');
+
+    const dateStr = String(result.params![2]);
+    expect(dateStr).toContain('September');
+    expect(dateStr).not.toContain('septiembre');
+  });
+
+  it('formats a rescheduled date in the chat language', () => {
+    db.setLocale(chatId, 'es');
+    service.createEvent(chatId, 'Partido', 12, adminId);
+
+    const result = service.rescheduleEvent(chatId, '2026-09-07T17:00:00.000Z', 'Europe/Madrid');
+
+    expect(String(result.params![0])).toContain('septiembre');
+  });
+
+  it('follows a language change without the caller doing anything', () => {
+    service.createEvent(chatId, 'Match', 12, adminId, '2026-09-07T17:00:00.000Z', 'Europe/Madrid');
+    service.cancelEvent(chatId);
+
+    db.setLocale(chatId, 'es');
+    const result = service.createEvent(chatId, 'Partido', 12, adminId, '2026-09-07T17:00:00.000Z', 'Europe/Madrid');
+
+    expect(String(result.params![2])).toContain('septiembre');
+  });
+
+  it('formats a comeback absence gap in the chat language', () => {
+    db.setLocale(chatId, 'es');
+    // One attended event, then three missed, so the next join is a comeback.
+    for (const week of [0, 1, 2, 3]) {
+      const at = new Date(Date.UTC(2026, 0, 1) + week * 7 * 86_400_000).toISOString();
+      const id = Number(db.createEvent(chatId, `Week ${week}`, 10, true, adminId, at, 'UTC'));
+      if (week === 0) db.addParticipant(id, ana, 'Ana', 'joined');
+      db.concludeEvent(id);
+    }
+
+    service.createEvent(chatId, 'Ahora', 10, adminId);
+    const cheer = service.joinEvent(chatId, ana, 'Ana').cheer;
+
+    expect(cheer?.messageKey).toBe('cheerComeback');
+    expect(String(cheer!.params[1])).toMatch(/semanas?|meses|mes/);
+  });
+});

@@ -49,7 +49,8 @@ function isGuestId(userId: string): boolean {
 export class EventService {
   constructor(private db: DatabaseManager) { }
 
-  createEvent(chatId: string, title: string, slots: number, userId: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
+  createEvent(chatId: string, title: string, slots: number, userId: string, eventAt?: string, timezone?: string, closeAndGroupOffsetMin?: number): ServiceResult {
+    const locale = this.db.getLocale(chatId);
     const existing = this.db.getActiveEvent(chatId);
     if (existing) {
       return { success: false, messageKey: 'activeEventExists' };
@@ -64,7 +65,8 @@ export class EventService {
     return { success: true, messageKey: 'eventCreated', params: [title, slots] };
   }
 
-  rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number, locale: Locale = 'en'): ServiceResult {
+  rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number): ServiceResult {
+    const locale = this.db.getLocale(chatId);
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
     this.db.updateEventSchedule(event.id, eventAt, timezone, closeAndGroupOffsetMin);
@@ -112,7 +114,8 @@ export class EventService {
     return { userId, streak };
   }
 
-  joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false, locale: Locale = 'en'): ServiceResult {
+  joinEvent(chatId: string, userId: string, userName: string, forceWaitlist: boolean = false): ServiceResult {
+    const locale = this.db.getLocale(chatId);
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
 

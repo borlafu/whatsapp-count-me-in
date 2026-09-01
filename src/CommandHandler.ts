@@ -149,7 +149,7 @@ export class CommandHandler {
       }
     }
 
-    const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin, locale);
+    const result = this.eventService.createEvent(chatId, title, slots, userId, eventAt, timezone, closeAndGroupOffsetMin);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 
@@ -175,7 +175,7 @@ export class CommandHandler {
       if (mins !== null && mins > 0) closeAndGroupOffsetMin = mins;
     }
 
-    const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin, locale);
+    const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 
@@ -196,7 +196,7 @@ export class CommandHandler {
   }
 
   private async executeJoin(msg: WAMessage, chatId: string, targetUserId: string, targetUserName: string, sock: WASocket, locale: Locale, forceWaitlist: boolean) {
-    const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist, locale);
+    const result = this.eventService.joinEvent(chatId, targetUserId, targetUserName, forceWaitlist);
     if (!result.success && result.messageKey === 'noActiveEvent') {
       return await this.safeReply(msg, chatId, sock, t(locale, 'noActiveEvent'));
     }
