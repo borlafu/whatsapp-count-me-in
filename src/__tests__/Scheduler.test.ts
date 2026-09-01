@@ -331,3 +331,83 @@ describe('Scheduler', () => {
     });
   });
 });
+
+describe('Scheduler auto-conclude targets the right event', () => {
+  let db: DatabaseManager;
+  let eventService: EventService;
+  let sendMessage: ReturnType<typeof vi.fn<(chatId: string, text: string) => Promise<void>>>;
+
+  const chatId = '12345@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    eventService = new EventService(db);
+    sendMessage = vi.fn().mockResolvedValue(undefined);
+  });
+
+  function runTick(nowMs: number) {
+    const scheduler = new Scheduler(db, eventService, sendMessage, (cid) => db.getLocale(cid), () => nowMs);
+    scheduler.start();
+    scheduler.stop();
+  }
+
+  /** Reads an event row directly, bypassing the active-only accessors. */
+  function statusOf(eventId: number): string {
+    return ((db as any).db.prepare('SELECT status FROM events WHERE id = ?').get(eventId) as { status: string }).status;
+  }
+
+  /**
+   * Forces a distinct creation timestamp. created_at only has second
+   * resolution, so events made in the same tick tie and getActiveEvent's
+   * ORDER BY created_at DESC falls back to insertion order, which happens to
+   * hide the bug under test.
+   */
+  function setCreatedAt(eventId: number, createdAt: string) {
+    (db as any).db.prepare('UPDATE events SET created_at = ? WHERE id = ?').run(createdAt, eventId);
+  }
+
+  it('concludes the expired event, not merely the newest active one in the chat', () => {
+    // Two active events in one chat: the older has passed, the newer has not.
+    // createEvent on the service refuses a second active event, so insert directly.
+    const expiredId = Number(db.createEvent(chatId, 'Expired', 10, true, adminId, '2026-04-15T18:00:00.000Z', 'UTC'));
+    const upcomingId = Number(db.createEvent(chatId, 'Upcoming', 10, true, adminId, '2026-05-20T18:00:00.000Z', 'UTC'));
+    setCreatedAt(expiredId, '2026-04-01 10:00:00');
+    setCreatedAt(upcomingId, '2026-04-02 10:00:00');
+
+    runTick(Date.parse('2026-04-15T18:01:00.000Z'));
+
+    expect(statusOf(expiredId)).toBe('concluded');
+    expect(statusOf(upcomingId)).toBe('active');
+  });
+
+  it('names the event it actually concluded', () => {
+    const expiredId = Number(db.createEvent(chatId, 'Expired', 10, true, adminId, '2026-04-15T18:00:00.000Z', 'UTC'));
+    const upcomingId = Number(db.createEvent(chatId, 'Upcoming', 10, true, adminId, '2026-05-20T18:00:00.000Z', 'UTC'));
+    setCreatedAt(expiredId, '2026-04-01 10:00:00');
+    setCreatedAt(upcomingId, '2026-04-02 10:00:00');
+
+    runTick(Date.parse('2026-04-15T18:01:00.000Z'));
+
+    const text = sendMessage.mock.calls[0]![1];
+    expect(text).toContain('Expired');
+    expect(text).not.toContain('Upcoming');
+  });
+
+  it('does not write a history row for an event that is still upcoming', () => {
+    const userId = 'user@s.whatsapp.net';
+    const expiredId = Number(db.createEvent(chatId, 'Expired', 10, true, adminId, '2026-04-15T18:00:00.000Z', 'UTC'));
+    const upcomingId = Number(db.createEvent(chatId, 'Upcoming', 10, true, adminId, '2026-05-20T18:00:00.000Z', 'UTC'));
+    setCreatedAt(expiredId, '2026-04-01 10:00:00');
+    setCreatedAt(upcomingId, '2026-04-02 10:00:00');
+    db.addParticipant(expiredId, userId, 'User', 'joined');
+    db.addParticipant(upcomingId, userId, 'User', 'joined');
+
+    runTick(Date.parse('2026-04-15T18:01:00.000Z'));
+
+    // Only the expired event belongs in history; a future event_at there would
+    // yield a negative absence gap and skew streaks.
+    const rows = db.getParticipationHistory(chatId, userId);
+    expect(rows.map(r => r.occurred_at)).toEqual(['2026-04-15T18:00:00.000Z']);
+  });
+});

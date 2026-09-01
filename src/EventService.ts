@@ -345,9 +345,27 @@ export class EventService {
     return { success: true, messageKey: 'eventCancelled', params: [event.title] };
   }
 
+  /**
+   * Concludes one specific event. Callers that already hold an event — the
+   * scheduler iterating expired events — must use this rather than the
+   * chat-based variant, which re-resolves to whichever event is newest and can
+   * therefore conclude a different one than the caller was looking at.
+   */
+  concludeEventById(eventId: number | bigint): void {
+    this.db.concludeEvent(eventId);
+  }
+
   concludeEvent(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
-    if (!event) return { success: false, messageKey: 'noActiveEventCancel' };
+    if (!event) return { success: false, messageKey: 'noActiveEventConclude' };
+
+    // Concluding early would put a future event into participation history,
+    // where it counts as a past event everyone who had not signed up yet
+    // missed — resetting their streaks over an event that has not happened.
+    // The !finish alias reads like "close sign-ups", so this is easy to hit.
+    if (event.event_at && Date.parse(event.event_at) > Date.now()) {
+      return { success: false, messageKey: 'concludeBeforeEventTime' };
+    }
 
     this.db.concludeEvent(event.id);
     return { success: true, messageKey: 'eventConcluded', params: [event.title] };

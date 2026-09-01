@@ -54,6 +54,9 @@ export class CommandHandler {
         case 'cancel':
           await this.handleCancel(msg, chatId, senderId, sock, locale);
           break;
+        case 'conclude':
+          await this.handleConclude(msg, chatId, senderId, sock, locale);
+          break;
         case 'resize':
           await this.handleResize(msg, chatId, senderId, args, sock, locale);
           break;
@@ -344,6 +347,14 @@ export class CommandHandler {
       return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
     }
     const result = this.eventService.cancelEvent(chatId);
+    await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleConclude(msg: WAMessage, chatId: string, userId: string, sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const result = this.eventService.concludeEvent(chatId);
     await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
   }
 

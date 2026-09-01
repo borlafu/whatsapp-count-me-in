@@ -427,10 +427,10 @@ describe('EventService', () => {
       expect(db.getActiveEvent(chatId)).toBeUndefined();
     });
 
-    it('should return noActiveEventCancel when no active event', () => {
+    it('should return noActiveEventConclude when no active event', () => {
       const result = service.concludeEvent(chatId);
       expect(result.success).toBe(false);
-      expect(result.messageKey).toBe('noActiveEventCancel');
+      expect(result.messageKey).toBe('noActiveEventConclude');
     });
   });
 });
@@ -616,5 +616,67 @@ describe('EventService cheer fixes from review', () => {
     const result = service.leaveByIndex(chatId, adminId, true, 1);
     expect(result.success).toBe(true);
     expect(result.streakLoss).toBeUndefined();
+  });
+});
+
+describe('EventService concludeEvent guards the scheduled time', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+
+  const chatId = 'guard@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const userId = 'user1@s.whatsapp.net';
+  const otherId = 'user2@s.whatsapp.net';
+
+  beforeEach(() => {
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+  });
+
+  const future = () => new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const past = () => new Date(Date.now() - 60_000).toISOString();
+
+  it('refuses to conclude an event that has not happened yet', () => {
+    service.createEvent(chatId, 'Friday Padel', 10, adminId, future(), 'UTC');
+
+    const result = service.concludeEvent(chatId);
+    expect(result.success).toBe(false);
+    expect(result.messageKey).toBe('concludeBeforeEventTime');
+    expect(db.getActiveEvent(chatId)).toBeDefined();
+  });
+
+  it('concludes an event whose scheduled time has passed', () => {
+    service.createEvent(chatId, 'Last Friday', 10, adminId, past(), 'UTC');
+
+    expect(service.concludeEvent(chatId).success).toBe(true);
+    expect(db.getActiveEvent(chatId)).toBeUndefined();
+  });
+
+  it('concludes an untimed event, which has no time to be early for', () => {
+    service.createEvent(chatId, 'Untimed', 10, adminId);
+
+    expect(service.concludeEvent(chatId).success).toBe(true);
+    expect(db.getActiveEvent(chatId)).toBeUndefined();
+  });
+
+  it('does not let an early conclude break the streaks of people who had not joined yet', () => {
+    // Build a streak for otherId across two past events.
+    for (const week of [0, 1]) {
+      const at = new Date(Date.UTC(2026, 0, 1) + week * 7 * 86_400_000).toISOString();
+      const id = Number(db.createEvent(chatId, `Week ${week}`, 10, true, adminId, at, 'UTC'));
+      db.addParticipant(id, otherId, 'Other', 'joined');
+      db.concludeEvent(id);
+    }
+
+    // A future event that otherId has not signed up for yet.
+    service.createEvent(chatId, 'Upcoming', 10, adminId, future(), 'UTC');
+    service.joinEvent(chatId, userId, 'User One');
+    service.concludeEvent(chatId);
+
+    // The refusal keeps the future event out of history, so the streak survives
+    // and the next join is still a milestone rather than a broken run.
+    const rows = db.getParticipationHistory(chatId, otherId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every(r => r.participated === 1)).toBe(true);
   });
 });
