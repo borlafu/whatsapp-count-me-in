@@ -357,7 +357,7 @@ export class EventService {
 
   concludeEvent(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
-    if (!event) return { success: false, messageKey: 'noActiveEventCancel' };
+    if (!event) return { success: false, messageKey: 'noActiveEventConclude' };
 
     this.db.concludeEvent(event.id);
     return { success: true, messageKey: 'eventConcluded', params: [event.title] };

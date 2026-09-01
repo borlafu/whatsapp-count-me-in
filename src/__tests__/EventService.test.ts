@@ -427,10 +427,10 @@ describe('EventService', () => {
       expect(db.getActiveEvent(chatId)).toBeUndefined();
     });
 
-    it('should return noActiveEventCancel when no active event', () => {
+    it('should return noActiveEventConclude when no active event', () => {
       const result = service.concludeEvent(chatId);
       expect(result.success).toBe(false);
-      expect(result.messageKey).toBe('noActiveEventCancel');
+      expect(result.messageKey).toBe('noActiveEventConclude');
     });
   });
 });

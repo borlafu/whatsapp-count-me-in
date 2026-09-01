@@ -1031,3 +1031,95 @@ describe('CommandHandler date locale', () => {
     expect(text).not.toContain('September');
   });
 });
+
+describe('CommandHandler !conclude', () => {
+  let db: DatabaseManager;
+  let service: EventService;
+  let handler: CommandHandler;
+
+  const chatId = '12345@g.us';
+  const adminId = 'admin@s.whatsapp.net';
+  const userId = 'user@s.whatsapp.net';
+
+  const mockSock: any = {
+    user: { id: adminId },
+    groupMetadata: vi.fn(),
+    sendMessage: vi.fn()
+  };
+
+  const msgFrom = (text: string, participant: string): any => ({
+    key: { remoteJid: chatId, fromMe: false, participant },
+    message: { conversation: text },
+    pushName: 'Someone'
+  });
+
+  const lastText = (): string => {
+    const calls = mockSock.sendMessage.mock.calls;
+    return calls[calls.length - 1][1].text as string;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = new DatabaseManager(':memory:');
+    service = new EventService(db);
+    handler = new CommandHandler(service, db);
+    mockSock.groupMetadata.mockResolvedValue({
+      participants: [{ id: adminId, admin: 'admin' }, { id: userId, admin: null }]
+    });
+  });
+
+  it('concludes the active event for an admin', async () => {
+    service.createEvent(chatId, 'Padel Tuesday', 8, adminId);
+
+    await handler.handleCommand(msgFrom('!conclude', adminId), mockSock);
+
+    expect(lastText()).toContain('Padel Tuesday');
+    expect(db.getActiveEvent(chatId)).toBeUndefined();
+  });
+
+  it('accepts the Spanish alias', async () => {
+    db.setLocale(chatId, 'es');
+    service.createEvent(chatId, 'Padel Martes', 8, adminId);
+
+    await handler.handleCommand(msgFrom('!concluir', adminId), mockSock);
+
+    expect(lastText()).toContain('concluido');
+    expect(db.getActiveEvent(chatId)).toBeUndefined();
+  });
+
+  it('refuses a non-admin', async () => {
+    service.createEvent(chatId, 'Padel Tuesday', 8, adminId);
+
+    await handler.handleCommand(msgFrom('!conclude', userId), mockSock);
+
+    expect(lastText()).toBe('Only group admins can do this.');
+    expect(db.getActiveEvent(chatId)).toBeDefined();
+  });
+
+  it('reports when there is nothing to conclude', async () => {
+    await handler.handleCommand(msgFrom('!conclude', adminId), mockSock);
+    expect(lastText()).toBe('No active event to conclude.');
+  });
+
+  it('lets an untimed event build participation history once concluded', async () => {
+    // The scheduler only auto-concludes events with a date, so without
+    // !conclude an untimed event never leaves 'active' and never counts.
+    service.createEvent(chatId, 'Untimed', 8, adminId);
+    service.joinEvent(chatId, userId, 'Someone');
+
+    await handler.handleCommand(msgFrom('!conclude', adminId), mockSock);
+
+    const event = ((db as any).db.prepare(
+      `SELECT id, status FROM events WHERE chat_id = ? ORDER BY id DESC LIMIT 1`
+    ).get(chatId)) as { id: number; status: string };
+    expect(event.status).toBe('concluded');
+  });
+
+  it('allows creating the next event after concluding', async () => {
+    service.createEvent(chatId, 'First', 8, adminId);
+    await handler.handleCommand(msgFrom('!conclude', adminId), mockSock);
+
+    const result = service.createEvent(chatId, 'Second', 8, adminId);
+    expect(result.success).toBe(true);
+  });
+});

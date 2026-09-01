@@ -44,6 +44,7 @@ export interface MessageTemplates {
 
   // Cancel
   noActiveEventCancel: () => string;
+  noActiveEventConclude: () => string;
   eventCancelled: (title: string) => string;
   eventConcluded: (title: string) => string;
 
@@ -124,6 +125,7 @@ const messages: Record<Locale, MessageTemplates> = {
     notAuthorizedToLeave: () => 'You can only remove yourself or your own guests.',
     leaveIndexInvalid: () => 'Invalid number. Please check the current !status.',
     noActiveEventCancel: () => 'No active event to cancel.',
+    noActiveEventConclude: () => 'No active event to conclude.',
     eventCancelled: (title) => `🛑 Event "${title}" has been cancelled.`,
     eventConcluded: (title) => `🎉 Event "${title}" has concluded. Thanks for joining!`,
     resizeUsage: () => 'Usage: !resize <new_slots>',
@@ -176,6 +178,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!rename "New Title"*  — Rename the active event (admin only)\n` +
       `*!reschedule YYYY-MM-DD HH:MM TZ*  — Update event date/time (admin only)\n` +
       `*!reminders on|off*  — Toggle daily reminders (admin only)\n` +
+      `*!conclude*  — Mark the active event as finished (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
       `*!groups [size]*  — Randomly assign participants into groups (admin only)\n` +
@@ -205,6 +208,7 @@ const messages: Record<Locale, MessageTemplates> = {
     notAuthorizedToLeave: () => 'Solo puedes retirarte a ti mismo o a tus propios invitados.',
     leaveIndexInvalid: () => 'Número inválido. Por favor revisa el !estado actual.',
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
+    noActiveEventConclude: () => 'No hay ningún evento activo que concluir.',
     eventCancelled: (title) => `🛑 El evento "${title}" ha sido cancelado.`,
     eventConcluded: (title) => `🎉 El evento "${title}" ha concluido. ¡Gracias por participar!`,
     resizeUsage: () => 'Uso: !resize <nuevas_plazas>',
@@ -257,6 +261,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!reprogramar YYYY-MM-DD HH:MM TZ*  — Actualizar fecha/hora (solo admins)\n` +
       `*!recordatorios on|off*  — Activar/desactivar recordatorios diarios (solo admins)\n` +
+      `*!concluir*  — Marcar el evento activo como finalizado (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
       `*!grupos [tamaño]*  — Asignar participantes en grupos aleatorios (solo admins)\n` +
