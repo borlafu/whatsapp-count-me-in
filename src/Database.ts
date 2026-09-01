@@ -9,7 +9,7 @@ export interface WhatsAppEvent {
   slots: number;
   waitlist_enabled: number;
   created_by: string;
-  status: 'active' | 'completed' | 'cancelled' | 'concluded';
+  status: 'active' | 'cancelled' | 'concluded';
   created_at: string;
   event_at?: string;
   timezone?: string;
@@ -311,7 +311,7 @@ export class DatabaseManager {
              ) THEN 1 ELSE 0 END AS participated
       FROM events e
       WHERE e.chat_id = ?
-        AND e.status IN ('concluded', 'completed')
+        AND e.status = 'concluded'
         AND e.event_at IS NOT NULL
       ORDER BY e.event_at ASC, e.id ASC
     `).all(userId, ...ATTENDED_STATUSES, chatId) as ParticipationRow[];
