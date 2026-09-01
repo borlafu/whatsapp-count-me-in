@@ -40,8 +40,9 @@ export class Scheduler {
       const msUntilEvent = Date.parse(event.event_at!) - now;
 
       if (msUntilEvent <= 0) {
-        // Auto-conclude
-        this.eventService.concludeEvent(event.chat_id);
+        // Auto-conclude this event by id. Resolving by chat would re-pick the
+        // newest active event, which is not necessarily the expired one.
+        this.eventService.concludeEventById(event.id);
         this.sendMessage(event.chat_id, t(locale, 'eventConcluded', event.title)).catch(console.error);
         continue;
       }

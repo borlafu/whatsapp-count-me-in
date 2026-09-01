@@ -345,6 +345,16 @@ export class EventService {
     return { success: true, messageKey: 'eventCancelled', params: [event.title] };
   }
 
+  /**
+   * Concludes one specific event. Callers that already hold an event — the
+   * scheduler iterating expired events — must use this rather than the
+   * chat-based variant, which re-resolves to whichever event is newest and can
+   * therefore conclude a different one than the caller was looking at.
+   */
+  concludeEventById(eventId: number | bigint): void {
+    this.db.concludeEvent(eventId);
+  }
+
   concludeEvent(chatId: string): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEventCancel' };
