@@ -104,14 +104,14 @@ describe('parseOffsetToMinutes', () => {
 describe('formatEventDate', () => {
   it('should format a date in the given timezone', () => {
     // 2026-04-15 18:00 UTC => in Europe/Madrid that's 20:00 (CEST, UTC+2)
-    const result = formatEventDate('2026-04-15T18:00:00.000Z', 'Europe/Madrid');
+    const result = formatEventDate('2026-04-15T18:00:00.000Z', 'Europe/Madrid', 'en');
     expect(result).toContain('20:00');
     expect(result).toContain('Wednesday');
     expect(result).toContain('April');
   });
 
   it('should format correctly for UTC timezone', () => {
-    const result = formatEventDate('2026-12-25T10:30:00.000Z', 'UTC');
+    const result = formatEventDate('2026-12-25T10:30:00.000Z', 'UTC', 'en');
     expect(result).toContain('10:30');
     expect(result).toContain('Friday');
     expect(result).toContain('December');
@@ -126,7 +126,7 @@ describe('formatEventDate', () => {
 
   it('should handle negative offset timezones', () => {
     // 2026-04-15T22:00Z => in America/New_York (EDT, UTC-4) => 18:00
-    const result = formatEventDate('2026-04-15T22:00:00.000Z', 'America/New_York');
+    const result = formatEventDate('2026-04-15T22:00:00.000Z', 'America/New_York', 'en');
     expect(result).toContain('18:00');
   });
 });
@@ -180,7 +180,7 @@ describe('localToUtc', () => {
   it('should correctly round-trip through formatEventDate', () => {
     const utc = localToUtc('2026-08-20', '15:30', 'Asia/Tokyo');
     expect(utc).not.toBeNull();
-    const formatted = formatEventDate(utc!, 'Asia/Tokyo');
+    const formatted = formatEventDate(utc!, 'Asia/Tokyo', 'en');
     expect(formatted).toContain('15:30');
   });
 });

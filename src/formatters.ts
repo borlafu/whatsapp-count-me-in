@@ -24,8 +24,14 @@ export function formatGroups(
   return text;
 }
 
-/** Formats a UTC ISO string as a human-readable date in the given timezone. */
-export function formatEventDate(eventAt: string, timezone: string, locale: Locale = 'en'): string {
+/**
+ * Formats a UTC ISO string as a human-readable date in the given timezone.
+ *
+ * The locale is required on purpose. Defaulting it to English is what put an
+ * English date inside a Spanish event announcement: the caller simply omitted
+ * the argument and nothing complained.
+ */
+export function formatEventDate(eventAt: string, timezone: string, locale: Locale): string {
   const date = new Date(eventAt);
   const intlLocale = locale === 'es' ? 'es-ES' : 'en-GB';
 
