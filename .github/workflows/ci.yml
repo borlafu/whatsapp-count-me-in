@@ -16,10 +16,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # Enable corepack before setup-node so the pnpm cache lookup can resolve
-      # the store path from the packageManager field in package.json.
-      - name: Enable corepack
-        run: corepack enable
+      # Node 26 no longer bundles corepack, so pnpm comes from this action,
+      # which reads the pinned version from the packageManager field in
+      # package.json. It still has to run before setup-node so the pnpm cache
+      # lookup can resolve the store path.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
         uses: actions/setup-node@v7
