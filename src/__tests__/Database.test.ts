@@ -243,46 +243,46 @@ describe('DatabaseManager concludeEvent settles pending promotions', () => {
   });
 });
 
-describe('DatabaseManager cheer tracking', () => {
+describe('DatabaseManager cheer settlement tracking', () => {
   const chatId = 'cheered@g.us';
   const adminId = 'admin@s.whatsapp.net';
   const ana = 'ana@s.whatsapp.net';
   const bob = 'bob@s.whatsapp.net';
 
-  it('reports no cheer before one is recorded', () => {
+  it('reports unsettled before anything is recorded', () => {
     const db = new DatabaseManager(':memory:');
     const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
     db.addParticipant(eventId, ana, 'Ana', 'joined');
 
-    expect(db.hasBeenCheered(eventId, ana)).toBe(false);
+    expect(db.isCheerResolved(eventId, ana)).toBe(false);
     db.close();
   });
 
-  it('remembers a recorded cheer', () => {
+  it('remembers a settled cheer', () => {
     const db = new DatabaseManager(':memory:');
     const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
     db.addParticipant(eventId, ana, 'Ana', 'joined');
 
-    db.markCheered(eventId, ana);
+    db.markCheerResolved(eventId, ana);
 
-    expect(db.hasBeenCheered(eventId, ana)).toBe(true);
+    expect(db.isCheerResolved(eventId, ana)).toBe(true);
     db.close();
   });
 
-  it('remembers the cheer after the user withdraws and rejoins', () => {
+  it('remembers the settlement after the user withdraws and rejoins', () => {
     // Rejoining inserts a fresh row, so the lookup has to span withdrawn rows.
     const db = new DatabaseManager(':memory:');
     const eventId = Number(db.createEvent(chatId, 'Match', 5, true, adminId));
     db.addParticipant(eventId, ana, 'Ana', 'joined');
-    db.markCheered(eventId, ana);
+    db.markCheerResolved(eventId, ana);
     db.withdrawParticipant(eventId, ana);
     db.addParticipant(eventId, ana, 'Ana', 'joined');
 
-    expect(db.hasBeenCheered(eventId, ana)).toBe(true);
+    expect(db.isCheerResolved(eventId, ana)).toBe(true);
     db.close();
   });
 
-  it('keeps cheer records separate per user and per event', () => {
+  it('keeps settlement records separate per user and per event', () => {
     const db = new DatabaseManager(':memory:');
     const first = Number(db.createEvent(chatId, 'First', 5, true, adminId));
     db.addParticipant(first, ana, 'Ana', 'joined');
@@ -291,11 +291,11 @@ describe('DatabaseManager cheer tracking', () => {
     const second = Number(db.createEvent(chatId, 'Second', 5, true, adminId));
     db.addParticipant(second, ana, 'Ana', 'joined');
 
-    db.markCheered(first, ana);
+    db.markCheerResolved(first, ana);
 
-    expect(db.hasBeenCheered(first, ana)).toBe(true);
-    expect(db.hasBeenCheered(first, bob)).toBe(false);
-    expect(db.hasBeenCheered(second, ana)).toBe(false);
+    expect(db.isCheerResolved(first, ana)).toBe(true);
+    expect(db.isCheerResolved(first, bob)).toBe(false);
+    expect(db.isCheerResolved(second, ana)).toBe(false);
     db.close();
   });
 });
@@ -303,7 +303,7 @@ describe('DatabaseManager cheer tracking', () => {
 describe('DatabaseManager schema v4 migration', () => {
   const testDbPath = path.join(process.cwd(), 'test-migration-v4.db');
 
-  it('adds cheered_at to a database created before the column existed', () => {
+  it('adds cheer_resolved_at to a database created before the column existed', () => {
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
 
     // A v3 database: every earlier migration applied, but no cheered_at.
@@ -335,12 +335,19 @@ describe('DatabaseManager schema v4 migration', () => {
     const dbManager = new DatabaseManager(testDbPath);
 
     const columns = ((dbManager as any).db.prepare('PRAGMA table_info(participants)').all() as any[]).map(c => c.name);
-    expect(columns).toContain('cheered_at');
+    expect(columns).toContain('cheer_resolved_at');
 
-    // The existing participant carries no cheer record, so a cheer is still due.
-    expect(dbManager.hasBeenCheered(1, 'ana@s.whatsapp.net')).toBe(false);
+    // The existing participant carries no settlement record, so a cheer is still due.
+    expect(dbManager.isCheerResolved(1, 'ana@s.whatsapp.net')).toBe(false);
 
     dbManager.close();
+
+    // Reopening must not retry the ALTER: a second attempt would abort with
+    // "duplicate column name" from inside the constructor.
+    const reopened = new DatabaseManager(testDbPath);
+    expect(reopened.isCheerResolved(1, 'ana@s.whatsapp.net')).toBe(false);
+    reopened.close();
+
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
   });
 });

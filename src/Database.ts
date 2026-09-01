@@ -28,7 +28,7 @@ export interface Participant {
   invited_by?: string;
   invited_by_name?: string;
   joined_at: string;
-  cheered_at?: string;
+  cheer_resolved_at?: string;
 }
 
 /** One past event in a group, flagged with whether a given user attended it. */
@@ -102,6 +102,19 @@ export class DatabaseManager {
     const row = this.db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
     const version = parseInt(row?.value ?? '0');
 
+    // Migrations and the version bump go in one transaction. Applied piecemeal,
+    // an interruption between an ALTER and the version write would leave the
+    // recorded version behind the real schema, and the next startup would retry
+    // the ALTER and abort with "duplicate column name" from the constructor,
+    // leaving the bot unable to start without manual repair.
+    this.db.transaction(() => {
+      this.applyMigrations(version);
+      this.db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+        .run(String(CURRENT_SCHEMA_VERSION));
+    })();
+  }
+
+  private applyMigrations(version: number) {
     if (version < 1) {
       this.db.exec(`
         ALTER TABLE participants ADD COLUMN invited_by TEXT;
@@ -125,11 +138,8 @@ export class DatabaseManager {
     }
 
     if (version < 4) {
-      this.db.exec(`ALTER TABLE participants ADD COLUMN cheered_at TEXT;`);
+      this.db.exec(`ALTER TABLE participants ADD COLUMN cheer_resolved_at TEXT;`);
     }
-
-    this.db.prepare(`INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
-      .run(String(CURRENT_SCHEMA_VERSION));
   }
 
   getLocale(chatId: string): Locale {
@@ -209,24 +219,33 @@ export class DatabaseManager {
   }
 
   /**
-   * True when this user has already been cheered for this event.
+   * True when this user's cheer for this event has already been settled.
+   *
+   * Settled means either a cheer was sent, or they held a real spot and gave it
+   * up. The second case matters because withdrawing from a spot triggers the
+   * streak-lost warning, so cheering the same streak on a rejoin would
+   * contradict a message the group just saw. Giving up a mere waitlist place
+   * settles nothing: no spot was held and no warning was sent.
    *
    * Checked across every row the user has for the event, including withdrawn
-   * ones, because leaving and rejoining inserts a fresh row. Recording the
-   * answer directly beats inferring it from a withdrawal: a withdrawn row does
-   * not say whether the spot it held was a real one or only a waitlist place.
+   * ones, because leaving and rejoining inserts a fresh row.
    */
-  hasBeenCheered(eventId: number | bigint, userId: string): boolean {
+  isCheerResolved(eventId: number | bigint, userId: string): boolean {
     const row = this.db.prepare(
-      `SELECT 1 FROM participants WHERE event_id = ? AND user_id = ? AND cheered_at IS NOT NULL LIMIT 1`
+      `SELECT 1 FROM participants WHERE event_id = ? AND user_id = ? AND cheer_resolved_at IS NOT NULL LIMIT 1`
     ).get(eventId, userId);
     return row !== undefined;
   }
 
-  /** Records that this user has now been cheered for this event. */
-  markCheered(eventId: number | bigint, userId: string): void {
+  /**
+   * Records that this user's cheer for this event is settled.
+   *
+   * Deliberately does not exclude withdrawn rows: withdrawing from a spot is
+   * itself a reason to settle, and by then the row is already withdrawn.
+   */
+  markCheerResolved(eventId: number | bigint, userId: string): void {
     this.db.prepare(
-      `UPDATE participants SET cheered_at = ? WHERE event_id = ? AND user_id = ? AND status NOT IN ('withdrawn')`
+      `UPDATE participants SET cheer_resolved_at = ? WHERE event_id = ? AND user_id = ?`
     ).run(new Date().toISOString(), eventId, userId);
   }
 

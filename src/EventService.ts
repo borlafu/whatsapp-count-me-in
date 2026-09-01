@@ -82,7 +82,8 @@ export class EventService {
     // History only covers past events, so it reads the same before and after a
     // withdrawal from the current one. Without this guard, leaving and rejoining
     // would replay the cheer, contradicting the streak-lost warning in between.
-    if (this.db.hasBeenCheered(eventId, userId)) return undefined;
+    // See isCheerResolved for what counts as settled.
+    if (this.db.isCheerResolved(eventId, userId)) return undefined;
 
     const summary = summarizeHistory(this.db.getParticipationHistory(chatId, userId));
     const cheer = selectJoinCheer(summary, Date.now());
@@ -129,7 +130,7 @@ export class EventService {
         };
         const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
         if (cheer) {
-          this.db.markCheered(event.id, userId);
+          this.db.markCheerResolved(event.id, userId);
           result.cheer = cheer;
         }
         return result;
@@ -148,7 +149,7 @@ export class EventService {
     const joinedCount = participants.filter((p: Participant) => p.status === 'joined' || p.status === 'pending_promotion').length;
 
     if (!forceWaitlist && joinedCount < event.slots) {
-      // Build the cheer before inserting, so hasBeenCheered is read against the
+      // Build the cheer before inserting, so isCheerResolved is read against the
       // rows that existed before this join, then record it against the new row.
       const cheer = this.buildJoinCheer(chatId, event.id, userId, locale);
       this.db.addParticipant(event.id, userId, userName, 'joined', undefined, undefined, 'join');
@@ -160,7 +161,7 @@ export class EventService {
         showStatus: true
       };
       if (cheer) {
-        this.db.markCheered(event.id, userId);
+        this.db.markCheerResolved(event.id, userId);
         result.cheer = cheer;
       }
       return result;
@@ -253,7 +254,8 @@ export class EventService {
     // The warning is second person ("you have lost your streak"), so it is only
     // for someone who chose to leave — never for a member an admin removed.
     const isSelfWithdrawal = !requesterId || requesterId === participant.user_id;
-    const streakLoss = isSelfWithdrawal && (oldStatus === 'joined' || oldStatus === 'pending_promotion')
+    const heldASpot = oldStatus === 'joined' || oldStatus === 'pending_promotion';
+    const streakLoss = isSelfWithdrawal && heldASpot
       ? this.buildStreakLoss(event.chat_id, participant.user_id)
       : undefined;
     this.db.withdrawParticipant(event.id, participant.user_id);
@@ -266,6 +268,13 @@ export class EventService {
       messageKey = 'guestWithdrawn';
       params = [participant.user_name, event.title, requesterId.split('@')[0]];
       mentions = [requesterId];
+    }
+
+    // Giving up a real spot settles the cheer for this event even when no cheer
+    // was ever sent. Otherwise a rejoin could celebrate the very streak the
+    // withdrawal just warned about losing. A waitlist place settles nothing.
+    if (heldASpot && !isGuestId(participant.user_id)) {
+      this.db.markCheerResolved(event.id, participant.user_id);
     }
 
     const result: ServiceResult = {
