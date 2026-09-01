@@ -1,15 +1,22 @@
 # ==== Build Stage ====
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+
+# Node 26 no longer bundles corepack (neither the official tarballs nor these
+# images ship it), so pnpm is installed straight from the version pinned in the
+# packageManager field, which stays the single source of truth. `.split('@')
+# .pop()` tolerates the integrity suffix corepack writes into that field
+# ("pnpm@1.2.3+sha512.…"), which is not a version npm can resolve.
+RUN npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop().split('+')[0]")"
+
+# Install all dependencies (including dev for TypeScript build).
+#
 # No compiler toolchain is installed. The only native dependency,
 # better-sqlite3, ships a musl prebuild (linuxmusl-x64/arm64) from v13 onward,
 # and pnpm-workspace.yaml disables its implicit node-gyp build.
-RUN corepack enable
-
-# Install all dependencies (including dev for TypeScript build)
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy source and build
@@ -25,7 +32,7 @@ RUN pnpm prune --prod
 RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.exec('CREATE TABLE t(a)');d.close();console.log('better-sqlite3 OK')"
 
 # ==== Production Stage ====
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Use tini to manage PID 1 so Ctrl+C propagates gracefully
 RUN apk add --no-cache tini
