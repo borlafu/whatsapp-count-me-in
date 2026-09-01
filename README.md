@@ -41,6 +41,14 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 
 ## Running Locally
 
+Requires Node.js 26 or newer (`nvm use` picks the right version up from `.nvmrc`; 26 becomes the
+active LTS line on 2026-10-28) and pnpm. Node 26 no longer bundles corepack, so install the pinned
+pnpm yourself:
+
+```bash
+npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop().split('+')[0]")"
+```
+
 1. Install dependencies:
 
    ```bash
@@ -152,6 +160,14 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
    ```bash
    pm2 logs whatsapp-count-me-in
    ```
+
+> **After a Node major upgrade,** PM2 needs three extra steps, because nvm installs each major into
+> its own prefix: reinstall the global binary (`npm install -g pm2`), respawn the daemon on the new
+> runtime (`pm2 update`, then `pm2 save`), and regenerate the boot unit (`pm2 startup`) since it
+> hardcodes the path of the Node binary that created it. The deploy workflow handles the first two
+> on its own. It can only regenerate the boot unit where passwordless sudo is available, so when
+> that is missing it logs an `ACTION REQUIRED` line instead of failing — check the deploy log and
+> re-run `pm2 startup` by hand, otherwise the next reboot starts PM2 from the old Node path.
 
 ## Technology
 
