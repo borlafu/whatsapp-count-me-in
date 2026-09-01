@@ -1101,9 +1101,11 @@ describe('CommandHandler !conclude', () => {
     expect(lastText()).toBe('No active event to conclude.');
   });
 
-  it('lets an untimed event build participation history once concluded', async () => {
-    // The scheduler only auto-concludes events with a date, so without
-    // !conclude an untimed event never leaves 'active' and never counts.
+  it('closes an untimed event, which the scheduler never would', async () => {
+    // The scheduler only auto-concludes events that have a date, so without
+    // !conclude an untimed event never leaves 'active' at all. Note this does
+    // not put it into participation history: getParticipationHistory still
+    // filters on event_at IS NOT NULL.
     service.createEvent(chatId, 'Untimed', 8, adminId);
     service.joinEvent(chatId, userId, 'Someone');
 

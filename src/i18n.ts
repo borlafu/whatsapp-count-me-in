@@ -45,6 +45,7 @@ export interface MessageTemplates {
   // Cancel
   noActiveEventCancel: () => string;
   noActiveEventConclude: () => string;
+  concludeBeforeEventTime: () => string;
   eventCancelled: (title: string) => string;
   eventConcluded: (title: string) => string;
 
@@ -126,6 +127,7 @@ const messages: Record<Locale, MessageTemplates> = {
     leaveIndexInvalid: () => 'Invalid number. Please check the current !status.',
     noActiveEventCancel: () => 'No active event to cancel.',
     noActiveEventConclude: () => 'No active event to conclude.',
+    concludeBeforeEventTime: () => 'This event has not happened yet, so it cannot be concluded. It will close by itself at its scheduled time. Use !cancel to call it off, or !reschedule to move it.',
     eventCancelled: (title) => `🛑 Event "${title}" has been cancelled.`,
     eventConcluded: (title) => `🎉 Event "${title}" has concluded. Thanks for joining!`,
     resizeUsage: () => 'Usage: !resize <new_slots>',
@@ -209,6 +211,7 @@ const messages: Record<Locale, MessageTemplates> = {
     leaveIndexInvalid: () => 'Número inválido. Por favor revisa el !estado actual.',
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
     noActiveEventConclude: () => 'No hay ningún evento activo que concluir.',
+    concludeBeforeEventTime: () => 'Este evento aún no ha ocurrido, así que no se puede concluir. Se cerrará solo a su hora programada. Usa !cancelar para anularlo, o !reprogramar para moverlo.',
     eventCancelled: (title) => `🛑 El evento "${title}" ha sido cancelado.`,
     eventConcluded: (title) => `🎉 El evento "${title}" ha concluido. ¡Gracias por participar!`,
     resizeUsage: () => 'Uso: !resize <nuevas_plazas>',

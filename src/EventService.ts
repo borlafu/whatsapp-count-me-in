@@ -359,6 +359,14 @@ export class EventService {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEventConclude' };
 
+    // Concluding early would put a future event into participation history,
+    // where it counts as a past event everyone who had not signed up yet
+    // missed — resetting their streaks over an event that has not happened.
+    // The !finish alias reads like "close sign-ups", so this is easy to hit.
+    if (event.event_at && Date.parse(event.event_at) > Date.now()) {
+      return { success: false, messageKey: 'concludeBeforeEventTime' };
+    }
+
     this.db.concludeEvent(event.id);
     return { success: true, messageKey: 'eventConcluded', params: [event.title] };
   }
