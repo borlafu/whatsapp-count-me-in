@@ -19,7 +19,7 @@
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "better-sqlite3": "^13.0.3",
-    "nodemailer": "^9.0.6",
+    "nodemailer": "^9.1.1",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.4"
