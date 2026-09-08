@@ -329,16 +329,21 @@ describe('CommandHandler', () => {
       }), expect.anything());
     });
 
-    it('should deny non-admin from inviting a guest', async () => {
+    it('should allow non-admin to invite a guest', async () => {
       mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
       service.createEvent(chatId, 'Party', 5, adminId);
       const msg = createMockMsg('!invite "Guest Name"');
       await handler.handleCommand(msg, mockSock);
 
       const event = db.getActiveEvent(chatId)!;
-      expect(db.getParticipants(event.id).length).toBe(0);
+      const participants = db.getParticipants(event.id);
+      const guest = participants.find(p => p.user_name === 'Guest Name')!;
+
+      expect(guest).toBeDefined();
+      expect(guest.user_id).toContain('guest:');
+      expect(guest.invited_by).toBe(userId);
       expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
-        text: expect.stringContaining('admins')
+        text: expect.stringContaining('Guest Name')
       }), expect.anything());
     });
 
@@ -450,19 +455,24 @@ describe('CommandHandler', () => {
       expect(participants.find(p => p.user_id === jid2)?.user_name).toBe('Bob');
     });
 
-    it('should block non-admin from using @mention invite', async () => {
-      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
-      service.createEvent(chatId, 'Party', 5, adminId);
+    it('should allow non-admin to use @mention invite', async () => {
       const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: userId, admin: null },
+          { id: memberJid, notify: 'Mentioned Member' }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
 
       const msg = createMentionMsg('!invite @member', [memberJid], userId);
       await handler.handleCommand(msg, mockSock);
 
       const event = db.getActiveEvent(chatId)!;
-      expect(db.getParticipants(event.id).length).toBe(0);
-      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
-        text: expect.stringContaining('admins')
-      }), expect.anything());
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant).toBeDefined();
+      expect(participant!.user_name).toBe('Mentioned Member');
+      expect(participant!.status).toBe('joined');
     });
 
     it('should put mentioned member on waitlist when event is full', async () => {

@@ -225,10 +225,6 @@ export class CommandHandler {
   }
 
   private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], sock: WASocket, locale: Locale) {
-    if (!(await this.isAdmin(chatId, userId, sock))) {
-      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
-    }
-
     const mentionedJids: string[] = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
 
     if (mentionedJids.length > 0) {
