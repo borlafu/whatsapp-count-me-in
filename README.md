@@ -42,9 +42,13 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 
 ## Running Locally
 
-Requires Node.js 26 or newer (`nvm use` picks the right version up from `.nvmrc`; 26 becomes the
-active LTS line on 2026-10-28) and pnpm. Node 26 no longer bundles corepack, so install the pinned
-pnpm yourself:
+Requires Node.js 26 or newer (`nvm use` picks the right version up from `.nvmrc`) and pnpm.
+`.nvmrc` pins an exact patch rather than the bare major, because 26 is still a Current release
+line until it is promoted to active LTS on 2026-10-28, and an unpinned `nvm install` during a
+deploy would roll production onto whichever 26.x shipped that week. Bump the pin deliberately
+for security releases, and relax it back to `26` once the line is LTS.
+
+Node 26 no longer bundles corepack, so install the pinned pnpm yourself:
 
 ```bash
 npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@').pop().split('+')[0]")"
@@ -151,7 +155,13 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 ### Native via PM2
 
 1. Build the app as described previously.
-2. Install PM2 process monitor globally (`pnpm add -g pm2`).
+2. Install PM2 process monitor globally, at the version the deploy workflow pins in
+   `PM2_VERSION` (`.github/workflows/deploy.yml`), so a manual install and a deployed one
+   cannot drift apart:
+
+   ```bash
+   npm install -g pm2@7.0.4
+   ```
 3. Optional: create `.env` next to `ecosystem.config.cjs` so alerts survive deploys (it is
    gitignored, so `git reset --hard` during deployment leaves it untouched).
 4. Limit the application's aggressive memory consumption dynamically and start the cluster:
@@ -167,8 +177,8 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
    ```
 
 > **After a Node major upgrade,** PM2 needs three extra steps, because nvm installs each major into
-> its own prefix: reinstall the global binary (`npm install -g pm2`), respawn the daemon on the new
-> runtime (`pm2 update`, then `pm2 save`), and regenerate the boot unit (`pm2 startup`) since it
+> its own prefix: reinstall the global binary (`npm install -g pm2@7.0.4`), respawn the daemon on the
+> new runtime (`pm2 update`, then `pm2 save`), and regenerate the boot unit (`pm2 startup`) since it
 > hardcodes the path of the Node binary that created it. The deploy workflow handles the first two
 > on its own. It can only regenerate the boot unit where passwordless sudo is available, so when
 > that is missing it logs an `ACTION REQUIRED` line instead of failing — check the deploy log and
