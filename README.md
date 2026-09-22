@@ -34,6 +34,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - `!reminders on|off`: Enable or disable daily reminders at 09:00 UTC for the active timed event (Admins only).
 - `!join` or `!waitlist`: Sign up for the event or join the waitlist.
 - `!invite "Guest Name"`: Invite an external guest (non-group member) to the event.
+- `!invite @member [@member ...]`: Sign up group members you mention, exactly as if they had sent `!join` themselves (their WhatsApp name is used).
 - `!leave [index]`: Withdraw from the event. Use the optional `index` (the number shown in `!status`) to remove a specific guest you invited or to remove yourself. Admins can remove anyone by index.
 - `!status`: Show the current list of participants and waitlist. Shows a countdown when the event has a scheduled date/time.
 - `!lang en|es`: Change bot language (Admins only).
