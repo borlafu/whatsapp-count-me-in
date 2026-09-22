@@ -87,20 +87,28 @@ function buildEmail(env: Env): Notifier | null {
   return new EmailNotifier(config, createSmtpTransport(config));
 }
 
+export interface NotifierSetup {
+  notifier: Notifier;
+  /** True when at least one channel besides the process log (Telegram, email) is configured. */
+  hasRemoteChannels: boolean;
+}
+
 /**
  * Builds the notifier from environment variables, validating at startup so a
  * half-configured channel fails fast instead of silently swallowing alerts.
- * Falls back to console-only logging when nothing is configured.
+ * The console channel is always included; Telegram and email are optional.
  */
-export function createNotifierFromEnv(env: Env = process.env): Notifier {
-  const channels = [buildTelegram(env), buildEmail(env)].filter((c): c is Notifier => c !== null);
+export function createNotifierFromEnv(env: Env = process.env): NotifierSetup {
+  const remote = [buildTelegram(env), buildEmail(env)].filter((c): c is Notifier => c !== null);
 
-  if (channels.length === 0) {
+  if (remote.length === 0) {
     console.warn(
-      'No alert channel configured (Telegram / SMTP). Re-link instructions will only be printed ' +
-        'to the log. See .env.example.',
+      'No remote alert channel configured (Telegram / SMTP). Re-link instructions will only be ' +
+        'printed to the log. See .env.example.',
     );
-    return new ConsoleNotifier();
   }
-  return new CompositeNotifier(channels);
+  return {
+    notifier: new CompositeNotifier([new ConsoleNotifier(), ...remote]),
+    hasRemoteChannels: remote.length > 0,
+  };
 }

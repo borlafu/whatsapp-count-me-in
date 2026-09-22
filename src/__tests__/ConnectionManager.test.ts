@@ -55,7 +55,11 @@ function createHarness(options: { createSocket?: () => FakeSocket; phoneNumber?:
   const alerts: Alert[] = [];
   let clock = 1_000_000;
 
-  const notifier: Notifier = { send: vi.fn(async (alert: Alert) => { alerts.push(alert); }) };
+  const resolved: string[] = [];
+  const notifier: Notifier = {
+    send: vi.fn(async (alert: Alert) => { alerts.push(alert); }),
+    resolve: vi.fn(async (_key: string, resolution: { subject: string }) => { resolved.push(resolution.subject); }),
+  };
   const wipe = vi.fn(async () => {});
   const saveCreds = vi.fn(async () => {});
   const onOpen = vi.fn();
@@ -103,7 +107,7 @@ function createHarness(options: { createSocket?: () => FakeSocket; phoneNumber?:
     await flush();
   }
 
-  return { manager, sockets, alerts, notifier, wipe, onOpen, onClose, wireAppEvents, advance, flush, close, open };
+  return { manager, sockets, alerts, resolved, notifier, wipe, onOpen, onClose, wireAppEvents, advance, flush, close, open };
 }
 
 describe('ConnectionManager', () => {
@@ -488,6 +492,30 @@ describe('ConnectionManager', () => {
       await h.advance(70_000);
       await emitQr(h, sock, 'qr-3');
       expect(h.alerts).toHaveLength(2);
+    });
+
+    it('closes the re-link alert once the connection opens', async () => {
+      const h = createHarness({ phoneNumber: '34600111222' });
+      await h.manager.start();
+      const sock = h.sockets[0]!;
+
+      await emitQr(h, sock, 'qr-1');
+      expect(h.resolved).toHaveLength(0);
+
+      h.open(sock);
+      await h.flush();
+
+      expect(h.resolved).toEqual(['WhatsApp re-link complete']);
+    });
+
+    it('does not close anything when no re-link alert was pushed', async () => {
+      const h = createHarness();
+      await h.manager.start();
+
+      h.open(h.sockets[0]!);
+      await h.flush();
+
+      expect(h.resolved).toHaveLength(0);
     });
 
     it('requests the pairing code only once per pairing window', async () => {

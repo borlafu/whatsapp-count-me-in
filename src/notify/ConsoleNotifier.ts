@@ -1,15 +1,17 @@
-import type { Alert, Notifier } from './Notifier.js';
+import type { Alert, AlertResolution, Notifier } from './Notifier.js';
 
 /**
- * Fallback notifier used when no channel is configured (local development).
- * Keeps the alerting code path identical everywhere instead of sprinkling
- * `if (notifier)` checks through the connection logic.
+ * Always-on channel: every alert also lands in the process log, so an operator
+ * tailing it sees what was sent to the phone (including the pairing code).
+ * Attachments are never printed; the QR image has its own terminal rendering
+ * in `Pairing`, gated on whether another way in exists.
  */
 export class ConsoleNotifier implements Notifier {
   async send(alert: Alert): Promise<void> {
     console.log(`[alert] ${alert.subject}\n${alert.body}`);
-    if (alert.attachment) {
-      console.log(`[alert] attachment omitted from console output: ${alert.attachment.filename}`);
-    }
+  }
+
+  async resolve(_replaceKey: string, resolution: AlertResolution): Promise<void> {
+    console.log(`[alert] ${resolution.subject}\n${resolution.body}`);
   }
 }

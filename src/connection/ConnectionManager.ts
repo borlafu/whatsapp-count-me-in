@@ -38,6 +38,8 @@ export interface ConnectionManagerDeps {
   notifier: Notifier;
   /** Digits only, with country code and no `+`. Enables pairing-code delivery. */
   phoneNumber?: string | undefined;
+  /** True when Telegram/email carry alerts too; hides the terminal QR when a pairing code covers it. */
+  hasRemoteChannels?: boolean;
   now?: () => number;
   random?: () => number;
 }
@@ -68,7 +70,9 @@ export class ConnectionManager {
   constructor(private deps: ConnectionManagerDeps) {
     this.now = deps.now ?? Date.now;
     this.random = deps.random ?? Math.random;
-    this.pairing = new Pairing(deps.notifier, deps.phoneNumber, this.now);
+    this.pairing = new Pairing(deps.notifier, deps.phoneNumber, this.now, {
+      hasRemoteChannels: deps.hasRemoteChannels ?? false,
+    });
   }
 
   async start(): Promise<void> {
@@ -146,7 +150,7 @@ export class ConnectionManager {
     this.resetAttemptCounters();
     this.downSince = null;
     this.hasSentDownAlert = false;
-    this.pairing.reset();
+    void this.pairing.reset('linked');
 
     console.log('WhatsApp Count Me In is ready!');
     this.deps.onOpen(sock);
@@ -234,7 +238,7 @@ export class ConnectionManager {
     }
 
     this.resetAttemptCounters();
-    this.pairing.reset();
+    await this.pairing.reset('superseded');
     console.log('Credentials wiped. Starting a new pairing session.');
     this.scheduleReconnect(0);
   }
