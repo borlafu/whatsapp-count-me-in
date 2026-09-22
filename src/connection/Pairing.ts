@@ -33,16 +33,23 @@ const RESOLUTIONS: Record<PairingOutcome, AlertResolution> = {
  * can edit (Telegram) refresh a single message instead of spamming; when the
  * window ends that message is rewritten with the outcome.
  */
+export interface PairingOptions {
+  /** Whether Telegram or email will carry the QR image as well. */
+  hasRemoteChannels: boolean;
+}
+
 export class Pairing {
   private lastPushAt: number | null = null;
   private windowId = 0;
   private pairingCode: string | null = null;
   private hasRequestedCode = false;
+  private hasCodeRequestFailed = false;
 
   constructor(
     private notifier: Notifier,
     private phoneNumber: string | undefined,
     private now: () => number = Date.now,
+    private options: PairingOptions = { hasRemoteChannels: false },
   ) {}
 
   /**
@@ -70,6 +77,7 @@ export class Pairing {
   beginSocketWindow(): void {
     this.pairingCode = null;
     this.hasRequestedCode = false;
+    this.hasCodeRequestFailed = false;
   }
 
   async handleQr(qr: string, sock: WASocket): Promise<void> {
@@ -77,9 +85,9 @@ export class Pairing {
     // while this handler is still awaiting. Anything from a stale window must
     // not be pushed, or an already-invalid code lands in a fresh message.
     const windowId = this.windowId;
-    await this.printToTerminal(qr);
     await this.requestPairingCodeOnce(sock, windowId);
     if (windowId !== this.windowId) return;
+    if (this.shouldPrintQrToTerminal()) await this.printToTerminal(qr);
 
     if (!this.shouldPush()) return;
     this.lastPushAt = this.now();
@@ -93,6 +101,18 @@ export class Pairing {
       ...(this.pairingCode ? { copyText: this.pairingCode } : {}),
       ...(png ? { attachment: { filename: 'whatsapp-qr.png', mime: 'image/png', data: png } } : {}),
     });
+  }
+
+  /**
+   * The raw QR grants full account access, so it stays out of the process log
+   * whenever another way in exists: a remote channel carrying the image plus a
+   * pairing code in the alert text. Otherwise it is the only credential and
+   * must be printed on every rotation.
+   */
+  private shouldPrintQrToTerminal(): boolean {
+    if (!this.options.hasRemoteChannels) return true;
+    if (!this.phoneNumber) return true;
+    return this.hasCodeRequestFailed;
   }
 
   private replaceKey(): string {
@@ -137,6 +157,7 @@ export class Pairing {
       this.pairingCode = code;
       console.log('Pairing code requested; delivered via alert channels.');
     } catch (err) {
+      this.hasCodeRequestFailed = true;
       console.error('Could not request a pairing code, falling back to QR only:', err);
     }
   }

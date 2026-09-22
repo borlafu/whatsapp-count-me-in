@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompositeNotifier } from '../notify/CompositeNotifier.js';
 import { TelegramNotifier } from '../notify/TelegramNotifier.js';
+import { ConsoleNotifier } from '../notify/ConsoleNotifier.js';
 import { EmailNotifier, type MailTransport, type SmtpConfig } from '../notify/EmailNotifier.js';
 import { createNotifierFromEnv, NotifierConfigError } from '../notify/config.js';
 import type { Alert, Notifier } from '../notify/Notifier.js';
@@ -55,6 +56,29 @@ describe('CompositeNotifier.resolve', () => {
 
     await expect(new CompositeNotifier([broken]).resolve('k', { subject: 'S', body: 'B' })).resolves.toBeUndefined();
     vi.restoreAllMocks();
+  });
+});
+
+describe('ConsoleNotifier', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('prints subject and body, and never the attachment', async () => {
+    await new ConsoleNotifier().send(alertWithPng);
+
+    expect(console.log).toHaveBeenCalledTimes(1);
+    expect(console.log).toHaveBeenCalledWith('[alert] Subject\nBody line');
+  });
+
+  it('prints the resolution text', async () => {
+    await new ConsoleNotifier().resolve('k', { subject: 'Done', body: 'Linked.' });
+
+    expect(console.log).toHaveBeenCalledWith('[alert] Done\nLinked.');
   });
 });
 
@@ -379,14 +403,24 @@ describe('createNotifierFromEnv', () => {
     vi.restoreAllMocks();
   });
 
-  it('falls back to console-only when nothing is configured', () => {
-    const notifier = createNotifierFromEnv({});
-    expect(notifier).toBeDefined();
+  it('always includes the console channel and warns when nothing remote is configured', () => {
+    const { notifier, hasRemoteChannels } = createNotifierFromEnv({});
+    expect(notifier).toBeInstanceOf(CompositeNotifier);
+    expect(hasRemoteChannels).toBe(false);
     expect(console.warn).toHaveBeenCalled();
   });
 
-  it('builds a composite when both channels are configured', () => {
-    const notifier = createNotifierFromEnv({
+  it('logs alerts to the console even when a remote channel is configured', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { notifier } = createNotifierFromEnv({ NOTIFY_TELEGRAM_BOT_TOKEN: 'TOKEN', NOTIFY_TELEGRAM_CHAT_ID: '42' });
+
+    await notifier.send({ subject: 'S', body: 'Pairing code: ABCD' });
+
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Pairing code: ABCD'));
+  });
+
+  it('reports remote channels when both are configured', () => {
+    const { notifier, hasRemoteChannels } = createNotifierFromEnv({
       NOTIFY_TELEGRAM_BOT_TOKEN: 'TOKEN',
       NOTIFY_TELEGRAM_CHAT_ID: '42',
       NOTIFY_SMTP_HOST: 'smtp.example.com',
@@ -394,12 +428,14 @@ describe('createNotifierFromEnv', () => {
       NOTIFY_EMAIL_TO: 'me@example.com',
     });
     expect(notifier).toBeInstanceOf(CompositeNotifier);
+    expect(hasRemoteChannels).toBe(true);
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it('accepts a Telegram-only setup copied from .env.example', () => {
     // .env.example ships PORT and SECURE pre-filled; they must not count as
     // "email was configured", or the bot would refuse to start.
-    const notifier = createNotifierFromEnv({
+    const { hasRemoteChannels } = createNotifierFromEnv({
       WA_PHONE_NUMBER: '34600111222',
       NOTIFY_TELEGRAM_BOT_TOKEN: 'TOKEN',
       NOTIFY_TELEGRAM_CHAT_ID: '42',
@@ -409,7 +445,7 @@ describe('createNotifierFromEnv', () => {
       NOTIFY_EMAIL_FROM: '',
       NOTIFY_EMAIL_TO: '',
     });
-    expect(notifier).toBeInstanceOf(CompositeNotifier);
+    expect(hasRemoteChannels).toBe(true);
   });
 
   it('accepts an untouched .env.example with no channel at all', () => {
@@ -472,8 +508,8 @@ describe('createNotifierFromEnv', () => {
   });
 
   it('ignores whitespace-only values', () => {
-    const notifier = createNotifierFromEnv({ NOTIFY_TELEGRAM_BOT_TOKEN: '   ' });
-    expect(notifier).toBeDefined();
+    const { hasRemoteChannels } = createNotifierFromEnv({ NOTIFY_TELEGRAM_BOT_TOKEN: '   ' });
+    expect(hasRemoteChannels).toBe(false);
     expect(console.warn).toHaveBeenCalled();
   });
 });

@@ -69,8 +69,12 @@ fill in what you need; `pnpm start` and the PM2 setup both load `.env` automatic
 | `NOTIFY_SMTP_HOST` / `NOTIFY_SMTP_PORT` / `NOTIFY_SMTP_SECURE` / `NOTIFY_SMTP_USER` / `NOTIFY_SMTP_PASS` / `NOTIFY_EMAIL_FROM` / `NOTIFY_EMAIL_TO` | Sends the same alerts by email over any SMTP server. |
 
 Both channels can be enabled at once. A partially configured channel is rejected at startup so
-alerts never fail silently. With no channel configured the bot falls back to logging the
-instructions, which is fine for local development.
+alerts never fail silently. Every alert is also written to the process log, so with no channel
+configured you still get the instructions there, which is fine for local development.
+
+The QR code is rendered in the terminal only when it is the sole way in: no remote channel, no
+`WA_PHONE_NUMBER`, or the pairing code could not be requested. With Telegram or email plus a
+phone number configured, the log carries the pairing code and the QR image stays off disk.
 
 > **Security:** a QR code or pairing code grants full control of the linked WhatsApp account.
 > Point alerts at a private Telegram chat and a mailbox you control, and keep `.env` out of

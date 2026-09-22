@@ -44,7 +44,7 @@ class WhatsAppBot {
   private scheduler: Scheduler | null = null;
   private connection: ConnectionManager;
 
-  constructor(private notifier: Notifier) {
+  constructor(private notifier: Notifier, hasRemoteChannels: boolean) {
     this.db = new DatabaseManager();
     this.eventService = new EventService(this.db);
     this.commandHandler = new CommandHandler(this.eventService, this.db, this.contactNames);
@@ -60,6 +60,7 @@ class WhatsAppBot {
       onClose: () => this.stopScheduler(),
       notifier: this.notifier,
       phoneNumber: readPhoneNumber(),
+      hasRemoteChannels,
     });
   }
 
@@ -146,8 +147,9 @@ function installCrashHandlers(notifier: Notifier): void {
 }
 
 let notifier: Notifier;
+let hasRemoteChannels: boolean;
 try {
-  notifier = createNotifierFromEnv();
+  ({ notifier, hasRemoteChannels } = createNotifierFromEnv());
 } catch (err) {
   if (err instanceof NotifierConfigError) {
     console.error(`Invalid alert configuration: ${err.message}`);
@@ -158,7 +160,7 @@ try {
 
 installCrashHandlers(notifier);
 
-const bot = new WhatsAppBot(notifier);
+const bot = new WhatsAppBot(notifier, hasRemoteChannels);
 bot.start().catch(err => {
   console.error('Unexpected error during startup:', err);
   process.exit(1);

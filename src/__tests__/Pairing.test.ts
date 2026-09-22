@@ -155,6 +155,59 @@ describe('Pairing', () => {
     expect(alerts[0]?.copyText).toBe('ABCD1234');
   });
 
+  describe('terminal QR', () => {
+    const TERMINAL_QR_HEADER = 'Scan this QR code with your WhatsApp app:';
+
+    function terminalPrints(): number {
+      return (console.log as ReturnType<typeof vi.fn>).mock.calls
+        .filter(call => call[0] === TERMINAL_QR_HEADER).length;
+    }
+
+    it('prints the QR when no remote channel is configured', async () => {
+      const pairing = new Pairing(notifier, '34600111222', Date.now, { hasRemoteChannels: false });
+
+      await pairing.handleQr('2@abc', sock);
+
+      expect(terminalPrints()).toBe(1);
+    });
+
+    it('skips the QR when a remote channel carries it and a pairing code exists', async () => {
+      const pairing = new Pairing(notifier, '34600111222', Date.now, { hasRemoteChannels: true });
+
+      await pairing.handleQr('2@abc', sock);
+
+      expect(terminalPrints()).toBe(0);
+      expect(alerts[0]?.copyText).toBe('ABCD1234');
+    });
+
+    it('prints the QR when remote channels exist but no phone number is configured', async () => {
+      const pairing = new Pairing(notifier, undefined, Date.now, { hasRemoteChannels: true });
+
+      await pairing.handleQr('2@abc', sock);
+
+      expect(terminalPrints()).toBe(1);
+    });
+
+    it('prints the QR when the pairing code request failed, so there is still a way in', async () => {
+      (sock.requestPairingCode as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('not-authorized'));
+      const pairing = new Pairing(notifier, '34600111222', Date.now, { hasRemoteChannels: true });
+
+      await pairing.handleQr('2@abc', sock);
+      await pairing.handleQr('2@def', sock);
+
+      expect(terminalPrints()).toBe(2);
+    });
+
+    it('prints every rotation while the QR is the only way in', async () => {
+      const pairing = new Pairing(notifier, undefined, Date.now, { hasRemoteChannels: false });
+
+      await pairing.handleQr('2@abc', sock);
+      await pairing.handleQr('2@def', sock);
+
+      expect(terminalPrints()).toBe(2);
+    });
+  });
+
   it('works with a notifier that cannot resolve', async () => {
     const plain: Notifier = { send: vi.fn(async () => {}) };
     const pairing = new Pairing(plain, '34600111222');
