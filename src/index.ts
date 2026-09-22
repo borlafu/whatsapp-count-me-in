@@ -6,6 +6,7 @@ import {
   type AuthenticationState,
   type WAMessage,
   type WASocket,
+  type Contact,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { DatabaseManager } from './Database.js';
@@ -79,18 +80,11 @@ class WhatsAppBot {
 
   private wireAppEvents(sock: WASocket): void {
     sock.ev.on('contacts.upsert', contacts => {
-      for (const c of contacts) {
-        const id = jidNormalizedUser(c.id);
-        if (c.notify) this.contactNames.set(id, c.notify);
-      }
+      for (const c of contacts) this.rememberContact(c);
     });
 
     sock.ev.on('contacts.update', updates => {
-      for (const c of updates) {
-        if (c.id && c.notify) {
-          this.contactNames.set(jidNormalizedUser(c.id), c.notify);
-        }
-      }
+      for (const c of updates) this.rememberContact(c);
     });
 
     sock.ev.on('messages.upsert', async m => {
@@ -100,6 +94,14 @@ class WhatsAppBot {
         await this.commandHandler.handleCommand(msg as WAMessage, sock);
       }
     });
+  }
+
+  /** Stores a contact's public name under every id WhatsApp may use for them. */
+  private rememberContact(c: Partial<Contact>): void {
+    if (!c.notify) return;
+    for (const id of [c.id, c.lid, c.phoneNumber]) {
+      if (id) this.contactNames.set(jidNormalizedUser(id), c.notify);
+    }
   }
 
   private startScheduler(sock: WASocket): void {

@@ -434,6 +434,127 @@ describe('CommandHandler', () => {
       expect(participant!.user_name).toBe('María García');
     });
 
+    it('should use pushName learned from an earlier message of the mentioned member', async () => {
+      const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberJid }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const chatter = createMockMsg('hola a todos', false, memberJid);
+      chatter.pushName = 'Alex Public';
+      await handler.handleCommand(chatter, mockSock);
+
+      const msg = createMentionMsg('!invite @member', [memberJid]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant!.user_name).toBe('Alex Public');
+    });
+
+    it('should learn pushName under the alternate id when the sender uses a LID', async () => {
+      const memberLid = '111222333@lid';
+      const memberPn = '34600111222@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberLid, phoneNumber: memberPn }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const chatter = createMockMsg('hola', false, memberLid);
+      chatter.key.participantAlt = memberPn;
+      chatter.pushName = 'Alex Public';
+      await handler.handleCommand(chatter, mockSock);
+
+      const msg = createMentionMsg('!invite @member', [memberPn]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberPn);
+      expect(participant!.user_name).toBe('Alex Public');
+    });
+
+    it('should resolve contact name through the phone number when the mention uses a LID', async () => {
+      const memberLid = '111222333@lid';
+      const memberPn = '34600111222@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberLid, phoneNumber: memberPn }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const contactNames = new Map<string, string>();
+      contactNames.set(memberPn, 'From Contacts');
+      const handlerWithContacts = new CommandHandler(service, db, contactNames);
+
+      const msg = createMentionMsg('!invite @member', [memberLid]);
+      await handlerWithContacts.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberLid);
+      expect(participant!.user_name).toBe('From Contacts');
+    });
+
+    it('should resolve contact name through the LID mapping store when metadata has no phone number', async () => {
+      const memberLid = '111222333@lid';
+      const memberPn = '34600111222@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberLid }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const contactNames = new Map<string, string>();
+      contactNames.set(memberPn, 'Mapped Name');
+      const handlerWithContacts = new CommandHandler(service, db, contactNames);
+
+      const sockWithLid: any = {
+        ...mockSock,
+        signalRepository: {
+          lidMapping: {
+            getPNForLID: vi.fn().mockResolvedValue(memberPn),
+            getLIDForPN: vi.fn().mockResolvedValue(null)
+          }
+        }
+      };
+
+      const msg = createMentionMsg('!invite @member', [memberLid]);
+      await handlerWithContacts.handleCommand(msg, sockWithLid);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberLid);
+      expect(participant!.user_name).toBe('Mapped Name');
+    });
+
+    it('should fall back to the phone number, never the LID digits, when no name is known', async () => {
+      const memberLid = '111222333@lid';
+      const memberPn = '34600111222@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberLid, phoneNumber: memberPn }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const msg = createMentionMsg('!invite @member', [memberLid]);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberLid);
+      expect(participant!.user_name).toBe('34600111222');
+    });
+
     it('should join multiple mentioned members using their names', async () => {
       const jid1 = 'member1@s.whatsapp.net';
       const jid2 = 'member2@s.whatsapp.net';

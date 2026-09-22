@@ -5,6 +5,7 @@ import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
 import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
+import { collectMemberJids, findParticipant, resolveMemberName } from './memberNames.js';
 
 export class CommandHandler {
   constructor(
@@ -26,6 +27,7 @@ export class CommandHandler {
       if (!senderId) return;
 
       senderId = jidNormalizedUser(senderId);
+      this.rememberName(msg, senderId);
       const userName: string = msg.pushName || senderId.split('@')[0] || 'Unknown';
       const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
       if (!body.startsWith('!')) return;
@@ -234,11 +236,9 @@ export class CommandHandler {
 
       for (let i = 0; i < mentionedJids.length; i++) {
         const memberJid = jidNormalizedUser(mentionedJids[i]!);
-        const participant = metadata.participants.find(p => p.id === memberJid);
-        const memberName = (participant as any)?.notify
-          ?? this.contactNames.get(memberJid)
-          ?? isolateNames[i]
-          ?? memberJid.split('@')[0];
+        const participant = findParticipant(metadata.participants, memberJid);
+        const memberJids = await collectMemberJids(memberJid, participant, sock);
+        const memberName = resolveMemberName(memberJids, participant, this.contactNames, isolateNames[i]);
         await this.executeJoin(msg, chatId, memberJid, memberName, sock, locale, false);
       }
       return;
@@ -256,6 +256,17 @@ export class CommandHandler {
     } else {
       await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
     }
+  }
+
+  /**
+   * Remembers the sender's public WhatsApp name under every id they use, so a
+   * later @mention invite can name them the same way !join would.
+   */
+  private rememberName(msg: WAMessage, senderId: string): void {
+    if (!msg.pushName) return;
+    this.contactNames.set(senderId, msg.pushName);
+    const altId = msg.key?.participantAlt;
+    if (altId) this.contactNames.set(jidNormalizedUser(altId), msg.pushName);
   }
 
   private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
