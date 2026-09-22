@@ -1,11 +1,26 @@
 import qrcode from 'qrcode';
 import type { WASocket } from '@whiskeysockets/baileys';
-import type { Notifier } from '../notify/Notifier.js';
+import type { AlertResolution, Notifier } from '../notify/Notifier.js';
 
 /** Baileys rotates the QR every ~20s; don't spam a channel with every rotation. */
 const QR_PUSH_INTERVAL_MS = 90_000;
 const QR_PNG_SCALE = 8;
 const QR_PNG_MARGIN = 2;
+const ALERT_SUBJECT = 'WhatsApp re-link required';
+
+/** Why a pairing window ended; decides the closing text of the pushed alert. */
+export type PairingOutcome = 'linked' | 'superseded';
+
+const RESOLUTIONS: Record<PairingOutcome, AlertResolution> = {
+  linked: {
+    subject: 'WhatsApp re-link complete',
+    body: 'The bot is linked again. The pairing code and QR code above are no longer valid.',
+  },
+  superseded: {
+    subject: 'WhatsApp re-link instructions superseded',
+    body: 'The session was reset again. Ignore the code above; fresh instructions follow in a new alert.',
+  },
+};
 
 /**
  * Delivers re-link instructions to the operator: a pairing code when a phone
@@ -13,9 +28,14 @@ const QR_PNG_MARGIN = 2;
  *
  * The QR string itself is never logged or included in text — it is equivalent
  * to full account access.
+ *
+ * Every push within one pairing window shares a replace key, so channels that
+ * can edit (Telegram) refresh a single message instead of spamming; when the
+ * window ends that message is rewritten with the outcome.
  */
 export class Pairing {
   private lastPushAt: number | null = null;
+  private windowId = 0;
   private pairingCode: string | null = null;
   private hasRequestedCode = false;
 
@@ -25,10 +45,21 @@ export class Pairing {
     private now: () => number = Date.now,
   ) {}
 
-  /** Starts a new pairing window: forgets the throttle as well as the code. */
-  reset(): void {
+  /**
+   * Ends the current pairing window and starts a new one: forgets the throttle
+   * as well as the code, and closes the alert pushed in the old window, if any.
+   */
+  async reset(outcome: PairingOutcome): Promise<void> {
+    const pushedKey = this.lastPushAt === null ? null : this.replaceKey();
     this.lastPushAt = null;
+    this.windowId += 1;
     this.beginSocketWindow();
+    if (pushedKey === null) return;
+    try {
+      await this.notifier.resolve?.(pushedKey, RESOLUTIONS[outcome]);
+    } catch (err) {
+      console.error('Failed to close the re-link alert:', err);
+    }
   }
 
   /**
@@ -42,18 +73,30 @@ export class Pairing {
   }
 
   async handleQr(qr: string, sock: WASocket): Promise<void> {
+    // Events are not serialised: the connection can open (and reset the window)
+    // while this handler is still awaiting. Anything from a stale window must
+    // not be pushed, or an already-invalid code lands in a fresh message.
+    const windowId = this.windowId;
     await this.printToTerminal(qr);
-    await this.requestPairingCodeOnce(sock);
+    await this.requestPairingCodeOnce(sock, windowId);
+    if (windowId !== this.windowId) return;
 
     if (!this.shouldPush()) return;
     this.lastPushAt = this.now();
 
     const png = await this.renderPng(qr);
+    if (windowId !== this.windowId) return;
     await this.notifier.send({
-      subject: 'WhatsApp re-link required',
+      subject: ALERT_SUBJECT,
       body: this.buildBody(),
+      replaceKey: this.replaceKey(),
+      ...(this.pairingCode ? { copyText: this.pairingCode } : {}),
       ...(png ? { attachment: { filename: 'whatsapp-qr.png', mime: 'image/png', data: png } } : {}),
     });
+  }
+
+  private replaceKey(): string {
+    return `pairing:${this.windowId}`;
   }
 
   private shouldPush(): boolean {
@@ -81,15 +124,17 @@ export class Pairing {
       '',
       ...steps,
       '',
-      'Codes rotate; if this one no longer works a new alert will follow shortly.',
+      'Codes rotate; this alert is refreshed with the latest code and QR until the bot is linked.',
     ].join('\n');
   }
 
-  private async requestPairingCodeOnce(sock: WASocket): Promise<void> {
+  private async requestPairingCodeOnce(sock: WASocket, windowId: number): Promise<void> {
     if (!this.phoneNumber || this.hasRequestedCode) return;
     this.hasRequestedCode = true;
     try {
-      this.pairingCode = await sock.requestPairingCode(this.phoneNumber);
+      const code = await sock.requestPairingCode(this.phoneNumber);
+      if (windowId !== this.windowId) return;
+      this.pairingCode = code;
       console.log('Pairing code requested; delivered via alert channels.');
     } catch (err) {
       console.error('Could not request a pairing code, falling back to QR only:', err);

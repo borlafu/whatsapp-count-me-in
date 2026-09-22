@@ -146,7 +146,7 @@ export class ConnectionManager {
     this.resetAttemptCounters();
     this.downSince = null;
     this.hasSentDownAlert = false;
-    this.pairing.reset();
+    void this.pairing.reset('linked');
 
     console.log('WhatsApp Count Me In is ready!');
     this.deps.onOpen(sock);
@@ -234,7 +234,7 @@ export class ConnectionManager {
     }
 
     this.resetAttemptCounters();
-    this.pairing.reset();
+    await this.pairing.reset('superseded');
     console.log('Credentials wiped. Starting a new pairing session.');
     this.scheduleReconnect(0);
   }

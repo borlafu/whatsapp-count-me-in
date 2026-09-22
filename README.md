@@ -20,7 +20,7 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - **Daily Reminders**: Sends a daily reminder at 09:00 UTC for upcoming timed events (can be toggled off).
 - **Low Profile Engine**: Specifically designed to run in environments with 1GB RAM or less, consuming < 100MB of RAM.
 - **Self-healing connection**: Transient drops reconnect with exponential backoff. When the session becomes unusable (logged out, replaced by another WhatsApp Web session, corrupted credentials) the bot resets its own credentials and starts a new pairing session — no SSH, no manual restart.
-- **Re-link alerts**: Sends the pairing code and QR code to Telegram and/or email, plus an alert if it has been offline for more than five minutes and another when it recovers.
+- **Re-link alerts**: Sends the pairing code and QR code to Telegram and/or email, plus an alert if it has been offline for more than five minutes and another when it recovers. On Telegram the code comes with a one-tap copy button, and rotating codes update a single message instead of piling up.
 
 ## Commands
 

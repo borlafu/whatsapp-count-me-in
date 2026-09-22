@@ -1,4 +1,4 @@
-import type { Alert, Notifier } from './Notifier.js';
+import type { Alert, AlertResolution, Notifier } from './Notifier.js';
 
 /**
  * Fallback notifier used when no channel is configured (local development).
@@ -11,5 +11,9 @@ export class ConsoleNotifier implements Notifier {
     if (alert.attachment) {
       console.log(`[alert] attachment omitted from console output: ${alert.attachment.filename}`);
     }
+  }
+
+  async resolve(_replaceKey: string, resolution: AlertResolution): Promise<void> {
+    console.log(`[alert] ${resolution.subject}\n${resolution.body}`);
   }
 }

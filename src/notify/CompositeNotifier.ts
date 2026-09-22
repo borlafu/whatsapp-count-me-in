@@ -1,4 +1,4 @@
-import type { Alert, Notifier } from './Notifier.js';
+import type { Alert, AlertResolution, Notifier } from './Notifier.js';
 
 /**
  * Fans an alert out to every configured channel. A failing channel is logged
@@ -9,7 +9,19 @@ export class CompositeNotifier implements Notifier {
   constructor(private channels: Notifier[]) {}
 
   async send(alert: Alert): Promise<void> {
-    const results = await Promise.allSettled(this.channels.map(channel => channel.send(alert)));
+    await this.fanOut(this.channels.map(channel => channel.send(alert)));
+  }
+
+  async resolve(replaceKey: string, resolution: AlertResolution): Promise<void> {
+    await this.fanOut(
+      this.channels
+        .filter(channel => typeof channel.resolve === 'function')
+        .map(channel => channel.resolve!(replaceKey, resolution)),
+    );
+  }
+
+  private async fanOut(deliveries: Promise<void>[]): Promise<void> {
+    const results = await Promise.allSettled(deliveries);
     for (const result of results) {
       if (result.status === 'rejected') {
         console.error('Alert channel failed:', result.reason);
