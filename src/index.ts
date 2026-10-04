@@ -12,6 +12,7 @@ import pino from 'pino';
 import { DatabaseManager } from './Database.js';
 import { EventService } from './EventService.js';
 import { CommandHandler } from './CommandHandler.js';
+import { rememberMemberName } from './memberNames.js';
 import { Scheduler } from './Scheduler.js';
 import { ConnectionManager } from './connection/ConnectionManager.js';
 import { wipeAuthState } from './connection/authState.js';
@@ -40,12 +41,13 @@ class WhatsAppBot {
   private db: DatabaseManager;
   private eventService: EventService;
   private commandHandler: CommandHandler;
-  private contactNames: Map<string, string> = new Map();
+  private contactNames: Map<string, string>;
   private scheduler: Scheduler | null = null;
   private connection: ConnectionManager;
 
   constructor(private notifier: Notifier, hasRemoteChannels: boolean) {
     this.db = new DatabaseManager();
+    this.contactNames = new Map(this.db.getMemberNames());
     this.eventService = new EventService(this.db);
     this.commandHandler = new CommandHandler(this.eventService, this.db, this.contactNames);
 
@@ -101,7 +103,7 @@ class WhatsAppBot {
   private rememberContact(c: Partial<Contact>): void {
     if (!c.notify) return;
     for (const id of [c.id, c.lid, c.phoneNumber]) {
-      if (id) this.contactNames.set(jidNormalizedUser(id), c.notify);
+      if (id) rememberMemberName(this.contactNames, this.db, jidNormalizedUser(id), c.notify);
     }
   }
 

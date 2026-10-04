@@ -1,5 +1,7 @@
 import type { GroupParticipant, WASocket } from '@whiskeysockets/baileys';
 import { jidNormalizedUser } from '@whiskeysockets/baileys';
+import type { DatabaseManager } from './Database.js';
+import { formatPhoneNumber } from './formatters.js';
 
 const LID_SUFFIX = '@lid';
 
@@ -40,7 +42,7 @@ async function lookupMappedJid(jid: string, sock: WASocket): Promise<string | un
 /**
  * Picks the best display name for a member. Order: the name WhatsApp reports
  * on the participant, a name learned from contacts or messages under any of
- * their ids, the name embedded in the mention text, then the phone number.
+ * their ids, the name embedded in the mention text, then the formatted phone number.
  * LID digits are only used when nothing else is known.
  */
 export function resolveMemberName(
@@ -51,6 +53,22 @@ export function resolveMemberName(
 ): string {
   const learned = jids.map(j => contactNames.get(j)).find(name => !!name);
   const phoneJid = jids.find(j => !isLidJid(j));
-  const fallbackJid = phoneJid ?? jids[0] ?? '';
-  return participant?.notify ?? learned ?? isolateName ?? fallbackJid.split('@')[0] ?? 'Unknown';
+  const fallback = phoneJid ? formatPhoneNumber(phoneJid.split('@')[0]!) : jids[0]?.split('@')[0];
+  return participant?.notify ?? learned ?? isolateName ?? fallback ?? 'Unknown';
+}
+
+/**
+ * Records a member's public name in memory and in the database, so it
+ * survives restarts. Skips the write when the name is already known.
+ */
+export function rememberMemberName(names: Map<string, string>, db: DatabaseManager, jid: string, name: string): void {
+  if (names.get(jid) === name) return;
+  names.set(jid, name);
+  // The name is only cosmetic: a failed save must not abort the command or
+  // event handler that learned it. The in-memory name still serves until restart.
+  try {
+    db.setMemberName(jid, name);
+  } catch (err) {
+    console.error(`Failed to save member name for ${jid}:`, err);
+  }
 }

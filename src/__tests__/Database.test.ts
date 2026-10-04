@@ -388,3 +388,59 @@ describe('DatabaseManager getParticipationHistory status filter', () => {
     db.close();
   });
 });
+
+describe('DatabaseManager member names', () => {
+  it('stores and overwrites a member name per jid', () => {
+    const db = new DatabaseManager(':memory:');
+    db.setMemberName('ana@s.whatsapp.net', 'Ana');
+    db.setMemberName('ana@s.whatsapp.net', 'Ana María');
+    db.setMemberName('111@lid', 'Ana María');
+    expect(new Map(db.getMemberNames())).toEqual(new Map([
+      ['ana@s.whatsapp.net', 'Ana María'],
+      ['111@lid', 'Ana María'],
+    ]));
+    db.close();
+  });
+});
+
+describe('DatabaseManager schema v5 migration', () => {
+  const testDbPath = path.join(process.cwd(), 'test-migration-v5.db');
+
+  it('seeds member names from past self-joins, ignoring invited guests and digit fallbacks', () => {
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+
+    const legacyDb = new Database(testDbPath);
+    legacyDb.exec(`
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, title TEXT NOT NULL,
+        slots INTEGER NOT NULL, waitlist_enabled INTEGER DEFAULT 1, created_by TEXT NOT NULL,
+        status TEXT DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        event_at TEXT, timezone TEXT, close_and_group_offset_min INTEGER,
+        groups_triggered INTEGER DEFAULT 0, last_reminder_date TEXT
+      );
+      CREATE TABLE participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL, status TEXT NOT NULL,
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        invited_by TEXT, invited_by_name TEXT, join_source TEXT, cheer_resolved_at TEXT
+      );
+      CREATE TABLE chat_settings (
+        chat_id TEXT PRIMARY KEY, locale TEXT NOT NULL DEFAULT 'en', reminders_enabled INTEGER DEFAULT 1
+      );
+      INSERT INTO meta (key, value) VALUES ('schema_version', '4');
+      INSERT INTO participants (event_id, user_id, user_name, status) VALUES (1, 'ana@s.whatsapp.net', 'Ana Old', 'joined');
+      INSERT INTO participants (event_id, user_id, user_name, status) VALUES (2, 'ana@s.whatsapp.net', 'Ana New', 'joined');
+      INSERT INTO participants (event_id, user_id, user_name, status, invited_by) VALUES (2, 'bob@s.whatsapp.net', '34600111222', 'joined', 'ana@s.whatsapp.net');
+      INSERT INTO participants (event_id, user_id, user_name, status) VALUES (2, '34611222333@s.whatsapp.net', '34611222333', 'joined');
+      INSERT INTO participants (event_id, user_id, user_name, status) VALUES (2, '999888777@lid', '999888777', 'joined');
+    `);
+    legacyDb.close();
+
+    const dbManager = new DatabaseManager(testDbPath);
+    expect(new Map(dbManager.getMemberNames())).toEqual(new Map([['ana@s.whatsapp.net', 'Ana New']]));
+    dbManager.close();
+
+    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+  });
+});

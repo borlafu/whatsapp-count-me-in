@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc, formatAbsenceGap } from '../formatters.js';
+import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc, formatAbsenceGap, formatPhoneNumber } from '../formatters.js';
 import { t } from '../i18n.js';
 
 describe('parsePositiveInt', () => {
@@ -227,5 +227,17 @@ describe('formatAbsenceGap with unusable input', () => {
     expect(formatAbsenceGap(NaN, 'es', t)).toBe('1 semana');
     expect(formatAbsenceGap(NaN, 'en', t)).toBe('1 week');
     expect(formatAbsenceGap(Infinity, 'en', t)).toBe('1 week');
+  });
+});
+
+describe('formatPhoneNumber', () => {
+  it('splits off the country code with a + and groups the rest', () => {
+    expect(formatPhoneNumber('34699829036')).toBe('+34 699 82 90 36');
+    expect(formatPhoneNumber('14155552671')).toBe('+1 415 555 2671');
+  });
+
+  it('returns the digits unchanged when they are not a possible phone number', () => {
+    expect(formatPhoneNumber('123')).toBe('123');
+    expect(formatPhoneNumber('')).toBe('');
   });
 });

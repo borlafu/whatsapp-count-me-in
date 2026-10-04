@@ -5,7 +5,7 @@ import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import type { EventService } from './EventService.js';
 import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
-import { collectMemberJids, findParticipant, resolveMemberName } from './memberNames.js';
+import { collectMemberJids, findParticipant, rememberMemberName, resolveMemberName } from './memberNames.js';
 
 export class CommandHandler {
   constructor(
@@ -264,9 +264,9 @@ export class CommandHandler {
    */
   private rememberName(msg: WAMessage, senderId: string): void {
     if (!msg.pushName) return;
-    this.contactNames.set(senderId, msg.pushName);
+    rememberMemberName(this.contactNames, this.db, senderId, msg.pushName);
     const altId = msg.key?.participantAlt;
-    if (altId) this.contactNames.set(jidNormalizedUser(altId), msg.pushName);
+    if (altId) rememberMemberName(this.contactNames, this.db, jidNormalizedUser(altId), msg.pushName);
   }
 
   private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
