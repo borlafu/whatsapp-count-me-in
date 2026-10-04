@@ -47,7 +47,7 @@ export interface ParticipationRow {
  */
 const ATTENDED_STATUSES = ['joined'] as const;
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 
 export class DatabaseManager {
   private db: Database.Database;
@@ -89,6 +89,11 @@ export class DatabaseManager {
       CREATE TABLE IF NOT EXISTS chat_settings (
         chat_id TEXT PRIMARY KEY,
         locale TEXT NOT NULL DEFAULT 'en'
+      );
+
+      CREATE TABLE IF NOT EXISTS member_names (
+        jid TEXT PRIMARY KEY,
+        name TEXT NOT NULL
       );
     `);
 
@@ -140,6 +145,28 @@ export class DatabaseManager {
     if (version < 4) {
       this.db.exec(`ALTER TABLE participants ADD COLUMN cheer_resolved_at TEXT;`);
     }
+
+    if (version < 5) {
+      // Self-joins (no inviter) carry the member's own WhatsApp name, so they
+      // seed the name store. All-digit names are skipped: !join stores the
+      // JID digits when pushName is missing, and those are not a name.
+      // Newest rows go first so INSERT OR IGNORE keeps the latest name.
+      this.db.exec(`
+        INSERT OR IGNORE INTO member_names (jid, name)
+        SELECT user_id, user_name FROM participants
+        WHERE invited_by IS NULL AND user_name GLOB '*[^0-9]*'
+        ORDER BY id DESC;
+      `);
+    }
+  }
+
+  getMemberNames(): [string, string][] {
+    const rows = this.db.prepare('SELECT jid, name FROM member_names').all() as { jid: string; name: string }[];
+    return rows.map(r => [r.jid, r.name]);
+  }
+
+  setMemberName(jid: string, name: string): void {
+    this.db.prepare('INSERT INTO member_names (jid, name) VALUES (?, ?) ON CONFLICT(jid) DO UPDATE SET name = excluded.name').run(jid, name);
   }
 
   getLocale(chatId: string): Locale {

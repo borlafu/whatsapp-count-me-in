@@ -1,5 +1,6 @@
 import type { Participant } from './Database.js';
 import { t, type Locale } from './i18n.js';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 /** Shared helper: formats groups output. Returns empty string if not enough participants. */
 export function formatGroups(
@@ -139,4 +140,14 @@ export function parseOffsetToMinutes(s: string): number | null {
   const match = s.match(/^(?:(\d+)h)?(?:(\d+)m)?$/i);
   if (!match || (!match[1] && !match[2])) return null;
   return (parseInt(match[1] ?? '0') * 60) + parseInt(match[2] ?? '0');
+}
+
+/**
+ * Formats bare international digits (as found in a WhatsApp JID) for display,
+ * e.g. "34699829036" -> "+34 699 82 90 36". Returns the input unchanged when
+ * it is not a possible phone number.
+ */
+export function formatPhoneNumber(digits: string): string {
+  const phone = parsePhoneNumberFromString(`+${digits}`);
+  return phone?.isPossible() ? phone.formatInternational() : digits;
 }

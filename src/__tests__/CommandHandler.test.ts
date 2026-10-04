@@ -172,6 +172,18 @@ describe('CommandHandler', () => {
       expect(participants.length).toBe(1);
       expect(mockSock.sendMessage).toHaveBeenCalled();
     });
+
+    it('should still join when saving the learned name fails', async () => {
+      service.createEvent(chatId, 'My Party', 2, adminId);
+      vi.spyOn(db, 'setMemberName').mockImplementation(() => { throw new Error('SQLITE_BUSY'); });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await handler.handleCommand(createMockMsg('!join'), mockSock);
+
+      const participants = db.getParticipants(db.getActiveEvent(chatId)!.id);
+      expect(participants[0]!.user_name).toBe('Test User');
+      errorSpy.mockRestore();
+    });
   });
 
   describe('!rename', () => {
@@ -434,6 +446,29 @@ describe('CommandHandler', () => {
       expect(participant!.user_name).toBe('María García');
     });
 
+    it('should keep a learned pushName across a bot restart', async () => {
+      const memberJid = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [
+          { id: adminId, admin: 'admin' },
+          { id: memberJid }
+        ]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      const chatter = createMockMsg('hola a todos', false, memberJid);
+      chatter.pushName = 'Alex Public';
+      await handler.handleCommand(chatter, mockSock);
+
+      const restarted = new CommandHandler(service, db, new Map(db.getMemberNames()));
+      const msg = createMentionMsg('!invite @member', [memberJid]);
+      await restarted.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      const participant = db.getParticipants(event.id).find(p => p.user_id === memberJid);
+      expect(participant!.user_name).toBe('Alex Public');
+    });
+
     it('should use pushName learned from an earlier message of the mentioned member', async () => {
       const memberJid = 'member@s.whatsapp.net';
       mockSock.groupMetadata.mockResolvedValue({
@@ -552,7 +587,7 @@ describe('CommandHandler', () => {
 
       const event = db.getActiveEvent(chatId)!;
       const participant = db.getParticipants(event.id).find(p => p.user_id === memberLid);
-      expect(participant!.user_name).toBe('34600111222');
+      expect(participant!.user_name).toBe('+34 600 11 12 22');
     });
 
     it('should join multiple mentioned members using their names', async () => {

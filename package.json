@@ -19,6 +19,7 @@
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "better-sqlite3": "^13.0.3",
+    "libphonenumber-js": "^1.13.14",
     "nodemailer": "^10.0.10",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
