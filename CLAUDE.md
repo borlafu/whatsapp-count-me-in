@@ -11,7 +11,7 @@ WhatsApp bot for event sign-ups and waitlists in groups.
 
 ## Stack
 
-- TypeScript, Node ≥24, pnpm
+- TypeScript, Node ≥26, pnpm
 - SQLite via better-sqlite3
 - WhatsApp via @whiskeysockets/baileys
 - Vitest for tests

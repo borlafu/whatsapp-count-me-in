@@ -55,17 +55,17 @@ jobs:
             git reset --hard origin/main
             nvm install
             nvm use
-            # A new Node major lands in its own nvm prefix, so globally
-            # installed packages do not carry over. Without the lines below pm2
-            # is simply not on PATH after a major bump, and a plain SSH session
-            # or a reboot would still land on the previous version.
+            # nvm gives every exact Node version its own prefix, so globally
+            # installed packages do not carry over: every .nvmrc bump
+            # reinstalls pm2 and triggers one `pm2 update` below. Without the
+            # alias a plain SSH session or a reboot would still land on the
+            # previous version.
             nvm alias default "$(cat .nvmrc)"
 
             # pm2 and pnpm are both pinned and both reinstalled only when the
             # pin and the installed version disagree, so a redeploy is a no-op
-            # but a bumped pin is followed. pm2 is left unpinned nowhere on
-            # purpose: `npm install -g pm2` would drift production onto
-            # whatever pm2@latest happens to be that day.
+            # but a bumped pin is followed. Pinning pm2 keeps production from
+            # drifting onto whatever pm2@latest happens to be that day.
             PM2_VERSION=7.0.4
             PM2_REINSTALLED=0
             if [ "$(pm2 --version 2>/dev/null)" != "$PM2_VERSION" ]; then
@@ -93,25 +93,29 @@ jobs:
             if [ -f "$HOME/.pm2/pm2.pid" ]; then
               DAEMON_NODE="$(readlink -f "/proc/$(cat "$HOME/.pm2/pm2.pid")/exe" 2>/dev/null || true)"
             fi
+            PM2_RESPAWNED=0
             if [ "$PM2_REINSTALLED" = 1 ] || { [ -n "$DAEMON_NODE" ] && [ "$DAEMON_NODE" != "$(readlink -f "$(command -v node)")" ]; }; then
               echo "Respawning the pm2 daemon on $(node -v) (was: ${DAEMON_NODE:-not running})"
               pm2 update
+              PM2_RESPAWNED=1
             fi
 
             pm2 reload ecosystem.config.cjs --update-env
             pm2 save
             # `pm2 startup` bakes the Node bin path into the systemd unit, so
-            # after a major bump a reboot would launch pm2 with the old binary,
-            # which nvm may eventually remove. Regenerating the unit is
-            # idempotent, but needs passwordless sudo. By this point the app is
-            # already built, reloaded and saved, so neither a missing sudo nor a
-            # sudoers rule that refuses this command may fail the deploy: both
-            # only cost a stale boot unit, and both must stay loud in the log.
-            if sudo -n true 2>/dev/null &&
-               sudo -n env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$(id -un)" --hp "$HOME"; then
-              echo "pm2 systemd unit refreshed for $(node -v)"
-            else
-              echo "ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)" >&2
+            # after a Node bump a reboot would launch pm2 with the old binary,
+            # which nvm may eventually remove. Only needed when pm2 was
+            # reinstalled or the daemon respawned. It needs passwordless sudo.
+            # By this point the app is already built, reloaded and saved, so
+            # neither a missing sudo nor a sudoers rule that refuses this
+            # command may fail the deploy: both only cost a stale boot unit,
+            # and both must stay loud in the log.
+            if [ "$PM2_RESPAWNED" = 1 ]; then
+              if sudo -n env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$(id -un)" --hp "$HOME"; then
+                echo "pm2 systemd unit refreshed for $(node -v)"
+              else
+                echo "ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)" >&2
+              fi
             fi
 
       - name: Update Deployment Status
