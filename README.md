@@ -156,10 +156,10 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
 
 1. Build the app as described previously.
 2. Install PM2 process monitor globally, at the version the deploy workflow pins in
-   `PM2_VERSION` (`.github/workflows/deploy.yml`); keep the version below in sync with it:
+   `PM2_VERSION` (`.github/workflows/deploy.yml`):
 
    ```bash
-   npm install -g pm2@7.0.4
+   npm install -g pm2@<PM2_VERSION from deploy.yml>
    ```
 3. Optional: create `.env` next to `ecosystem.config.cjs` so alerts survive deploys (it is
    gitignored, so `git reset --hard` during deployment leaves it untouched).
@@ -176,7 +176,7 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
    ```
 
 > **After a Node version bump (any `.nvmrc` change),** PM2 needs three extra steps, because nvm installs
-> each exact version into its own prefix: reinstall the global binary (`npm install -g pm2@7.0.4`), respawn the daemon on the
+> each exact version into its own prefix: reinstall the global binary (`npm install -g pm2@<PM2_VERSION from deploy.yml>`), respawn the daemon on the
 > new runtime (`pm2 update`, then `pm2 save`), and regenerate the boot unit (`pm2 startup`) since it
 > hardcodes the path of the Node binary that created it. The deploy workflow handles the first two
 > on its own. It can only regenerate the boot unit where passwordless sudo is available, so when
