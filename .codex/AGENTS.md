@@ -1,6 +1,6 @@
 # ECC for Codex CLI
 
-This supplements the root `AGENTS.md` with a repo-local ECC baseline.
+Repo-local ECC baseline for Codex CLI. Root Claude Code instructions live in `CLAUDE.md`.
 
 ## Repo Skill
 
