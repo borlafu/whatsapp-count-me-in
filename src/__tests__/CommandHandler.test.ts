@@ -52,6 +52,26 @@ describe('CommandHandler', () => {
     pushName: 'Admin User'
   });
 
+  // mockSock.user.id is adminId, so adminId is also the JID the bot answers to.
+  const createReplyMsg = (text: string, quotedAuthor: string, participant = userId): any => ({
+    key: {
+      remoteJid: chatId,
+      fromMe: false,
+      participant
+    },
+    message: {
+      extendedTextMessage: {
+        text,
+        contextInfo: {
+          participant: quotedAuthor
+        }
+      }
+    },
+    pushName: 'Test User'
+  });
+
+  const repliedTexts = (): string[] => mockSock.sendMessage.mock.calls.map((call: any[]) => call[1]?.text ?? '');
+
   beforeEach(() => {
     vi.clearAllMocks();
     db = new DatabaseManager(':memory:');
@@ -719,6 +739,255 @@ describe('CommandHandler', () => {
       expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
         text: expect.stringContaining('Invalid number')
       }), expect.anything());
+    });
+
+    it('should report a bad number rather than hunt for a participant named after it', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+
+      await handler.handleCommand(createMockMsg('!leave 0'), mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Invalid number')
+      }), expect.anything());
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+  });
+
+  describe('!leave follow-up messages', () => {
+    it('should still show the status when the freed-slot message fails to send', async () => {
+      service.createEvent(chatId, 'Party', 1, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+      service.joinEvent(chatId, 'next@s.whatsapp.net', 'Next Up'); // waitlisted
+
+      // The withdrawal is already committed by the time this message goes out,
+      // so a send failure must not take the rest of the reply down with it.
+      mockSock.sendMessage.mockImplementation((_chatId: string, content: any, options?: any) => {
+        if (content.text?.includes('A slot opened up')) throw new Error('network down');
+        if (!options) throw new Error('network down'); // the un-quoted retry path
+        return Promise.resolve();
+      });
+
+      await handler.handleCommand(createMockMsg('!leave'), mockSock);
+
+      // Restore before asserting: beforeEach clears calls but not implementations,
+      // so a failure here would otherwise leak this one into the next test.
+      const sent = repliedTexts().join('\n');
+      mockSock.sendMessage.mockReset();
+
+      expect(sent).toContain('1. Next Up (Pending)');
+    });
+  });
+
+  describe('!leave with a name', () => {
+    it('should withdraw the named guest, not the person who typed the command', async () => {
+      // The incident this guard exists for: "!invitar Juanlu" then "!salir Juanlu"
+      // used to withdraw the sender, because "Juanlu" was silently dropped.
+      service.createEvent(chatId, 'Partido', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+      await handler.handleCommand(createMockMsg('!invitar Juanlu'), mockSock);
+
+      await handler.handleCommand(createMockMsg('!salir Juanlu'), mockSock);
+
+      const names = db.getParticipants(db.getActiveEvent(chatId)!.id).map(p => p.user_name);
+      expect(names).toEqual(['Test User']);
+    });
+
+    it('should withdraw a participant an admin names', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Juanlu');
+
+      await handler.handleCommand(createMockMsg('!leave Juanlu', true, adminId), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(0);
+    });
+
+    it('should report a name nobody is signed up under', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+
+      await handler.handleCommand(createMockMsg('!leave Juanlu'), mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Nobody called "Juanlu" is signed up')
+      }), expect.anything());
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+
+    it('should refuse an ambiguous name and point at the numbers', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Juanlu');
+      service.joinEvent(chatId, 'other@s.whatsapp.net', 'Juan Carlos');
+
+      await handler.handleCommand(createMockMsg('!leave Juan', true, adminId), mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('1. Juanlu, 2. Juan Carlos')
+      }), expect.anything());
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(2);
+    });
+
+    it('should withdraw a mentioned member', async () => {
+      const memberId = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }, { id: memberId, notify: 'Juanlu' }]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, memberId, 'Juanlu');
+
+      await handler.handleCommand(createMentionMsg('!leave @member', [memberId]), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(0);
+    });
+  });
+
+  describe('unexpected arguments', () => {
+    it('should warn instead of joining the sender when !join is given a name', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg('!join Juanlu'), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('did not understand "Juanlu"');
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(0);
+    });
+
+    it('should point at !invite when !join is misused that way', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg('!join Juanlu'), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('!invite "Name"');
+    });
+
+    it('should warn instead of silently truncating an unquoted guest name', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg('!invitar Juan Carlos'), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('did not understand "Carlos"');
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(0);
+    });
+
+    it('should warn instead of renaming to the first word only', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg('!rename New Title', true, adminId), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('Usage: !rename');
+      expect(db.getActiveEvent(chatId)!.title).toBe('Party');
+    });
+
+    it('should warn on a stray word after a valid index', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+      service.joinEvent(chatId, userId, 'Test User');
+
+      await handler.handleCommand(createMockMsg('!leave 1 please'), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('did not understand "please"');
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+
+    it('should warn rather than truncate at a straight apostrophe', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg("!rename 'Tony's Padel'", true, adminId), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('Usage: !rename');
+      expect(db.getActiveEvent(chatId)!.title).toBe('Party');
+    });
+
+    it('should still accept a fully scheduled !create', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+
+      const msg = createMockMsg('!create "Padel" 8 2099-01-01 20:00 Europe/Madrid --close-and-group 1h', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      const event = db.getActiveEvent(chatId)!;
+      expect(event.title).toBe('Padel');
+      expect(event.close_and_group_offset_min).toBe(60);
+    });
+
+    it('should not count mentions as excess arguments for !invite', async () => {
+      const first = 'first@s.whatsapp.net';
+      const second = 'second@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: first, notify: 'One' }, { id: second, notify: 'Two' }]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMentionMsg('!invite @one @two', [first, second]), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).map(p => p.user_name)).toEqual(['One', 'Two']);
+    });
+  });
+
+  describe('unknown commands', () => {
+    it('should suggest the closest command for a typo', async () => {
+      await handler.handleCommand(createMockMsg('!salirr'), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('Did you mean !salir?');
+    });
+
+    it('should stay silent for text that merely starts with !', async () => {
+      await handler.handleCommand(createMockMsg('!!! what a game'), mockSock);
+
+      expect(mockSock.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('should stay silent for a word nowhere near a command', async () => {
+      await handler.handleCommand(createMockMsg('!bicicleta'), mockSock);
+
+      expect(mockSock.sendMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('trigger forms', () => {
+    it('should accept a space between the ! and the command', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMockMsg('! join'), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+
+    it('should accept a command with no ! when the bot is mentioned', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMentionMsg('@bot join', [adminId], userId), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+
+    it('should accept a command with no ! when replying to the bot', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createReplyMsg('join', adminId), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(1);
+    });
+
+    it('should ignore a bare command in a reply to someone other than the bot', async () => {
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createReplyMsg('join', 'someone@s.whatsapp.net'), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).length).toBe(0);
+    });
+
+    it('should never sign the bot up when it is mentioned alongside a member', async () => {
+      const memberId = 'member@s.whatsapp.net';
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: memberId, notify: 'Juanlu' }]
+      });
+      service.createEvent(chatId, 'Party', 5, adminId);
+
+      await handler.handleCommand(createMentionMsg('@bot invite @member', [adminId, memberId], userId), mockSock);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).map(p => p.user_name)).toEqual(['Juanlu']);
     });
   });
 

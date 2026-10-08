@@ -35,10 +35,20 @@ A super-lightweight WhatsApp bot for managing event sign-ups and waitlists in gr
 - `!join` or `!waitlist`: Sign up for the event or join the waitlist.
 - `!invite "Guest Name"`: Invite an external guest (non-group member) to the event.
 - `!invite @member [@member ...]`: Sign up group members you mention, exactly as if they had sent `!join` themselves (their WhatsApp name is used).
-- `!leave [index]`: Withdraw from the event. Use the optional `index` (the number shown in `!status`) to remove a specific guest you invited or to remove yourself. Admins can remove anyone by index.
+- `!leave [index | name | @member]`: Withdraw from the event. With no argument it withdraws you. Otherwise it removes whoever you name: the number shown in `!status`, a participant's name (accents and case ignored; a name matching more than one person is refused so nothing is removed by accident), or an @mention. You can remove yourself and the guests you invited; admins can remove anyone.
 - `!status`: Show the current list of participants and waitlist. Shows a countdown when the event has a scheduled date/time.
 - `!lang en|es`: Change bot language (Admins only).
 - `!help`: Show help message.
+
+### Writing a command
+
+Three forms work, so the `!` is not the only way in:
+
+- `!join`, or `! join` with a space after the `!`.
+- @mention the bot and drop the `!`: `@Count Me In join`.
+- Reply to any of the bot's own messages with just the command: `leave 3`.
+
+A command never runs with arguments it does not understand. `!leave Juanlu` removes Juanlu; `!join Juanlu` warns and shows the usage instead of signing up the sender. A mistyped command close to a real one (`!salirr`) gets a "did you mean" reply; anything further off is ignored, so ordinary `!` chatter stays quiet.
 
 ## Running Locally
 

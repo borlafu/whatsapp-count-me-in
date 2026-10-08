@@ -3,9 +3,16 @@ import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import type { DatabaseManager } from './Database.js';
 import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
-import type { EventService } from './EventService.js';
+import { commandSpec } from './commandSpecs.js';
+import type { EventService, ServiceResult } from './EventService.js';
 import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
 import { collectMemberJids, findParticipant, rememberMemberName, resolveMemberName } from './memberNames.js';
+
+/** One @mention, paired with the display name the sender's client wrote for it. */
+interface Mention {
+  jid: string;
+  isolateName: string | undefined;
+}
 
 export class CommandHandler {
   constructor(
@@ -30,12 +37,38 @@ export class CommandHandler {
       this.rememberName(msg, senderId);
       const userName: string = msg.pushName || senderId.split('@')[0] || 'Unknown';
       const body = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
-      if (!body.startsWith('!')) return;
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
+      const mentionedJids = (contextInfo?.mentionedJid ?? []).map(jidNormalizedUser);
+      const quotedAuthor = contextInfo?.participant ? jidNormalizedUser(contextInfo.participant) : undefined;
 
-      const { action, args } = CommandParser.parse(body);
+      // Ordinary chatter leaves before any parsing: a group sees far more of it
+      // than commands, and this bot is built to stay small.
+      const couldBeCommand = body.startsWith('!') || mentionedJids.length > 0 || !!quotedAuthor;
+      if (!couldBeCommand) return;
+
+      const botJids = collectBotJids(sock);
+      const parsed = CommandParser.parse(body, { botJids, mentionedJids, quotedAuthor });
+
+      if (parsed.unknown) {
+        const unknownLocale = this.db.getLocale(chatId);
+        return await this.safeReply(msg, chatId, sock, t(unknownLocale, 'unknownCommand', parsed.unknown.typed, parsed.unknown.suggestion));
+      }
+
+      const { action, args } = parsed;
       if (!action) return;
 
       const locale = this.db.getLocale(chatId);
+      // The bot's own mention addresses it; it is never a target of a command.
+      const mentions = collectMentions(msg, mentionedJids, botJids);
+
+      const spec = commandSpec(action);
+      if (spec) {
+        const typed = spec.mentionDriven && mentions.length > 0 ? [] : args;
+        if (typed.length > spec.maxArgs) {
+          const extra = typed.slice(spec.maxArgs).join(' ');
+          return await this.safeReply(msg, chatId, sock, t(locale, 'unexpectedArgs', extra, t(locale, spec.usageKey)));
+        }
+      }
 
       switch (action) {
         case 'create':
@@ -48,7 +81,7 @@ export class CommandHandler {
           await this.handleJoin(msg, chatId, senderId, userName, sock, locale, true);
           break;
         case 'leave':
-          await this.handleLeave(msg, chatId, senderId, args, sock, locale);
+          await this.handleLeave(msg, chatId, senderId, args, mentions, sock, locale);
           break;
         case 'status':
           await this.handleStatus(msg, chatId, sock, locale);
@@ -66,7 +99,7 @@ export class CommandHandler {
           await this.handleRename(msg, chatId, senderId, args, sock, locale);
           break;
         case 'invite':
-          await this.handleInvite(msg, chatId, senderId, userName, args, sock, locale);
+          await this.handleInvite(msg, chatId, senderId, userName, args, mentions, sock, locale);
           break;
         case 'lang':
           await this.handleLang(msg, chatId, senderId, args, sock, locale);
@@ -226,20 +259,10 @@ export class CommandHandler {
     }
   }
 
-  private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], sock: WASocket, locale: Locale) {
-    const mentionedJids: string[] = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
-
-    if (mentionedJids.length > 0) {
-      const metadata = await sock.groupMetadata(chatId);
-      const msgText = msg.message?.extendedTextMessage?.text ?? '';
-      const isolateNames = [...msgText.matchAll(/⁨([^⁩]+)⁩/g)].map(m => m[1]!);
-
-      for (let i = 0; i < mentionedJids.length; i++) {
-        const memberJid = jidNormalizedUser(mentionedJids[i]!);
-        const participant = findParticipant(metadata.participants, memberJid);
-        const memberJids = await collectMemberJids(memberJid, participant, sock);
-        const memberName = resolveMemberName(memberJids, participant, this.contactNames, isolateNames[i]);
-        await this.executeJoin(msg, chatId, memberJid, memberName, sock, locale, false);
+  private async handleInvite(msg: WAMessage, chatId: string, userId: string, userName: string, args: string[], mentions: Mention[], sock: WASocket, locale: Locale) {
+    if (mentions.length > 0) {
+      for (const member of await this.resolveMentions(chatId, mentions, sock)) {
+        await this.executeJoin(msg, chatId, member.jid, member.name, sock, locale, false);
       }
       return;
     }
@@ -259,6 +282,24 @@ export class CommandHandler {
   }
 
   /**
+   * Resolves @mentions to every id each member is known by plus their best
+   * display name, fetching group metadata once for the whole batch.
+   */
+  private async resolveMentions(chatId: string, mentions: Mention[], sock: WASocket): Promise<Array<{ jid: string; jids: string[]; name: string }>> {
+    const metadata = await sock.groupMetadata(chatId);
+    const resolved: Array<{ jid: string; jids: string[]; name: string }> = [];
+
+    for (const mention of mentions) {
+      const participant = findParticipant(metadata.participants, mention.jid);
+      const jids = await collectMemberJids(mention.jid, participant, sock);
+      const name = resolveMemberName(jids, participant, this.contactNames, mention.isolateName);
+      resolved.push({ jid: mention.jid, jids, name });
+    }
+
+    return resolved;
+  }
+
+  /**
    * Remembers the sender's public WhatsApp name under every id they use, so a
    * later @mention invite can name them the same way !join would.
    */
@@ -269,28 +310,49 @@ export class CommandHandler {
     if (altId) rememberMemberName(this.contactNames, this.db, jidNormalizedUser(altId), msg.pushName);
   }
 
-  private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
-    const index = parsePositiveInt(args[0]);
-    let result;
-
-    if (index !== null) {
-      const isAdmin = await this.isAdmin(chatId, userId, sock);
-      result = this.eventService.leaveByIndex(chatId, userId, isAdmin, index);
-    } else {
-      result = this.eventService.leaveEvent(chatId, userId);
+  /**
+   * Withdraws someone from the event. The target is whoever the message names:
+   * nobody (the sender), a !status number, an @mention, or a name.
+   *
+   * A name that matches nobody is reported, never treated as "no target": the
+   * silent fallback to self-withdrawal is what made "!leave Juanlu" remove the
+   * person who typed it.
+   */
+  private async handleLeave(msg: WAMessage, chatId: string, userId: string, args: string[], mentions: Mention[], sock: WASocket, locale: Locale) {
+    const target = args[0];
+    if (target === undefined && mentions.length === 0) {
+      return await this.replyToWithdrawal(msg, chatId, sock, locale, this.eventService.leaveEvent(chatId, userId));
     }
 
+    const isAdmin = await this.isAdmin(chatId, userId, sock);
+
+    if (mentions.length > 0) {
+      for (const member of await this.resolveMentions(chatId, mentions, sock)) {
+        const result = this.eventService.leaveByUserIds(chatId, userId, isAdmin, member.jids, member.name);
+        await this.replyToWithdrawal(msg, chatId, sock, locale, result);
+      }
+      return;
+    }
+
+    // All digits means a !status number, even an out-of-range one: reporting a
+    // bad number beats searching for a participant named "99".
+    const result = /^\d+$/.test(target!.trim())
+      ? this.eventService.leaveByIndex(chatId, userId, isAdmin, Number(target!.trim()))
+      : this.eventService.leaveByName(chatId, userId, isAdmin, target!);
+    await this.replyToWithdrawal(msg, chatId, sock, locale, result);
+  }
+
+  private async replyToWithdrawal(msg: WAMessage, chatId: string, sock: WASocket, locale: Locale, result: ServiceResult) {
     if (!result.success) {
-      if (result.messageKey) await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any));
+      if (result.messageKey) {
+        await this.safeReply(msg, chatId, sock, t(locale, result.messageKey as any, ...(result.params || [])));
+      }
       return;
     }
 
     if (result.promotion) {
       const p = result.promotion;
-      await sock.sendMessage(chatId, {
-        text: t(locale, 'slotOpened', p.userId.split('@')[0] ?? '', p.eventTitle),
-        mentions: [p.userId]
-      });
+      await this.sendAside(chatId, sock, t(locale, 'slotOpened', p.userId.split('@')[0] ?? '', p.eventTitle), [p.userId]);
     }
 
     if (result.showStatus) {
@@ -308,16 +370,24 @@ export class CommandHandler {
   }
 
   /**
-   * Sends a cheer as its own message. Cheers are decoration, so a failure here
-   * is logged and swallowed rather than allowed to break the command that
-   * triggered it — the join or leave itself has already been confirmed.
+   * Sends a follow-up message that is not the command's own answer: a cheer, a
+   * freed-slot call, a bulk promotion.
+   *
+   * The command it follows has already been committed to the database, so a
+   * failure here is logged and swallowed rather than allowed to abort the rest
+   * of the reply — losing the aside is bad, losing the !status that comes after
+   * it is worse.
    */
-  private async sendCheer(chatId: string, sock: WASocket, locale: Locale, messageKey: keyof MessageTemplates, params: any[], mentions: string[]) {
+  private async sendAside(chatId: string, sock: WASocket, text: string, mentions: string[]) {
     try {
-      await sock.sendMessage(chatId, { text: t(locale, messageKey as any, ...params), mentions });
+      await sock.sendMessage(chatId, { text, mentions });
     } catch (err) {
-      console.error('Failed to send cheer:', err);
+      console.error('Failed to send follow-up message:', err);
     }
+  }
+
+  private async sendCheer(chatId: string, sock: WASocket, locale: Locale, messageKey: keyof MessageTemplates, params: any[], mentions: string[]) {
+    await this.sendAside(chatId, sock, t(locale, messageKey as any, ...params), mentions);
   }
 
   private async handleRename(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
@@ -344,10 +414,7 @@ export class CommandHandler {
       const mentions = result.promotions.map(p => p.userId);
       const names = result.promotions.map(p => `@${p.userId.split('@')[0]}`).join(', ');
       const event = this.db.getActiveEvent(chatId);
-      await sock.sendMessage(chatId, {
-        text: t(locale, 'bulkPromoted', names, event?.title ?? ''),
-        mentions
-      });
+      await this.sendAside(chatId, sock, t(locale, 'bulkPromoted', names, event?.title ?? ''), mentions);
     }
     if (result.showStatus) await this.handleStatus(msg, chatId, sock, locale);
   }
@@ -440,4 +507,27 @@ export class CommandHandler {
       await sock.sendMessage(chatId, { text, mentions: options.mentions || [] });
     }
   }
+}
+
+/** Every id the bot answers to, so it can tell when a message addresses it. */
+function collectBotJids(sock: WASocket): string[] {
+  const ids = [sock.user?.id, sock.user?.lid].filter((id): id is string => !!id);
+  return [...new Set(ids.map(jidNormalizedUser))];
+}
+
+/**
+ * Pairs each @mention with the display name the sender's client wrote for it,
+ * then drops the bot's own mention — addressing the bot is not a request to
+ * sign it up or remove it.
+ *
+ * The pairing happens before the filtering because the two lists are only
+ * aligned by position: removing from one alone shifts every later name.
+ */
+function collectMentions(msg: WAMessage, mentionedJids: string[], botJids: string[]): Mention[] {
+  const text = msg.message?.extendedTextMessage?.text ?? '';
+  const isolateNames = [...text.matchAll(/⁨([^⁩]+)⁩/g)].map(m => m[1]!);
+
+  return mentionedJids
+    .map((jid, i) => ({ jid, isolateName: isolateNames[i] }))
+    .filter(mention => !botJids.includes(mention.jid));
 }

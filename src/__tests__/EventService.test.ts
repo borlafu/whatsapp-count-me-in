@@ -73,6 +73,142 @@ describe('EventService', () => {
     });
   });
 
+  describe('leaveByName', () => {
+    it('should withdraw a guest the requester invited', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      service.inviteGuest(chatId, user1, 'User One', 'Juanlu');
+
+      const result = service.leaveByName(chatId, user1, false, 'Juanlu');
+
+      expect(result.success).toBe(true);
+      expect(result.messageKey).toBe('guestWithdrawn');
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id).map(p => p.user_name)).not.toContain('Juanlu');
+    });
+
+    it('should leave the requester signed up when removing someone else', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      service.inviteGuest(chatId, user1, 'User One', 'Juanlu');
+
+      service.leaveByName(chatId, user1, false, 'Juanlu');
+
+      expect(db.getParticipant(db.getActiveEvent(chatId)!.id, user1)!.status).toBe('joined');
+    });
+
+    it('should withdraw the requester when they name themselves', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByName(chatId, user1, false, 'User One');
+
+      expect(result.success).toBe(true);
+      expect(result.messageKey).toBe('withdrawn');
+    });
+
+    it('should let an admin withdraw anyone', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByName(chatId, adminId, true, 'User One');
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should refuse a non-admin removing someone who is not theirs', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+
+      const result = service.leaveByName(chatId, user2, false, 'User One');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('notAuthorizedToLeave');
+      expect(db.getParticipant(db.getActiveEvent(chatId)!.id, user1)!.status).toBe('joined');
+    });
+
+    it('should report a name nobody is signed up under', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByName(chatId, user1, false, 'Juanlu');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('leaveNameNotFound');
+      expect(result.params).toEqual(['Juanlu']);
+    });
+
+    it('should refuse an ambiguous name and list the numbers instead', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'Juanlu');
+      service.joinEvent(chatId, user2, 'Juan Carlos');
+
+      const result = service.leaveByName(chatId, adminId, true, 'Juan');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('leaveNameAmbiguous');
+      expect(result.params).toEqual(['Juan', '1. Juanlu, 2. Juan Carlos']);
+      expect(db.getParticipant(db.getActiveEvent(chatId)!.id, user1)!.status).toBe('joined');
+    });
+
+    it('should number an ambiguous waitlisted match after the participants', () => {
+      service.createEvent(chatId, 'Test Event', 1, adminId);
+      service.joinEvent(chatId, user1, 'Juanlu');
+      service.joinEvent(chatId, user2, 'Juan Carlos'); // waitlisted, event is full
+
+      const result = service.leaveByName(chatId, adminId, true, 'Juan');
+
+      expect(result.params).toEqual(['Juan', '1. Juanlu, 2. Juan Carlos']);
+    });
+
+    it('should report no active event', () => {
+      expect(service.leaveByName(chatId, user1, false, 'Juanlu').messageKey).toBe('noActiveEvent');
+    });
+  });
+
+  describe('leaveByUserIds', () => {
+    it('should withdraw a mentioned member found under an alternate id', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByUserIds(chatId, adminId, true, ['user1@lid', user1], 'User One');
+
+      expect(result.success).toBe(true);
+      expect(db.getParticipant(db.getActiveEvent(chatId)!.id, user1)).toBeUndefined();
+    });
+
+    it('should fall back to the display name when no id matches', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByUserIds(chatId, adminId, true, ['stale@lid'], 'User One');
+
+      expect(result.success).toBe(true);
+      expect(db.getParticipant(db.getActiveEvent(chatId)!.id, user1)).toBeUndefined();
+    });
+
+    it('should report a member who is not signed up', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+
+      const result = service.leaveByUserIds(chatId, adminId, true, [user2], 'User Two');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('leaveNameNotFound');
+    });
+
+    it('should refuse a non-admin removing a member who is not theirs', () => {
+      service.createEvent(chatId, 'Test Event', 4, adminId);
+      service.joinEvent(chatId, user1, 'User One');
+      service.joinEvent(chatId, user2, 'User Two');
+
+      const result = service.leaveByUserIds(chatId, user2, false, [user1], 'User One');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('notAuthorizedToLeave');
+    });
+  });
+
   describe('renameEvent', () => {
     it('should return error when no active event', () => {
       expect(service.renameEvent(chatId, 'New Name').messageKey).toBe('noActiveEvent');
