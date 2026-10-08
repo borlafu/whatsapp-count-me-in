@@ -1,7 +1,8 @@
-import { DatabaseManager, type Participant } from './Database.js';
+import { DatabaseManager, type Participant, type WhatsAppEvent } from './Database.js';
 import type { Locale, MessageTemplates } from './i18n.js';
 import { formatEventDate, formatAbsenceGap } from './formatters.js';
 import { t } from './i18n.js';
+import { findByName } from './nameMatch.js';
 import { summarizeHistory, selectJoinCheer, STREAK_LOSS_MIN } from './participation.js';
 
 export interface StatusData {
@@ -238,18 +239,73 @@ export class EventService {
     return this.performWithdrawal(event, participant);
   }
 
+  /**
+   * Everyone on the event in the order !status numbers them, so an index typed
+   * by a user means the same row here as the one they were looking at.
+   */
+  private displayList(eventId: number | bigint): Participant[] {
+    const participants = this.db.getParticipants(eventId);
+    return [
+      ...participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion'),
+      ...participants.filter(p => p.status === 'waitlisted'),
+    ];
+  }
+
   leaveByIndex(chatId: string, requesterId: string, isAdmin: boolean, index: number): ServiceResult {
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent' };
 
-    const participants = this.db.getParticipants(event.id);
-    const joined = participants.filter(p => p.status === 'joined' || p.status === 'pending_promotion');
-    const waitlisted = participants.filter(p => p.status === 'waitlisted');
-    const allDisplay = [...joined, ...waitlisted];
-
-    const participant = allDisplay[index - 1];
+    const participant = this.displayList(event.id)[index - 1];
     if (!participant) return { success: false, messageKey: 'leaveIndexInvalid' };
 
+    return this.withdrawTarget(event, participant, requesterId, isAdmin);
+  }
+
+  /**
+   * Withdraws the one person a typed name refers to. Refuses to act on an
+   * ambiguous name rather than pick: "!leave Juanlu" silently withdrawing the
+   * wrong person is the whole reason this path exists.
+   */
+  leaveByName(chatId: string, requesterId: string, isAdmin: boolean, name: string): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+
+    const allDisplay = this.displayList(event.id);
+    const matches = findByName(allDisplay, name);
+    if (matches.length === 0) {
+      return { success: false, messageKey: 'leaveNameNotFound', params: [name] };
+    }
+    if (matches.length > 1) {
+      const options = matches.map(p => `${allDisplay.indexOf(p) + 1}. ${p.user_name}`).join(', ');
+      return { success: false, messageKey: 'leaveNameAmbiguous', params: [name, options] };
+    }
+
+    return this.withdrawTarget(event, matches[0]!, requesterId, isAdmin);
+  }
+
+  /**
+   * Withdraws a mentioned member. WhatsApp reports the same person under
+   * several ids (phone number, LID), and the sign-up was stored under whichever
+   * one was current then, so every known id is tried before falling back to the
+   * display name.
+   */
+  leaveByUserIds(chatId: string, requesterId: string, isAdmin: boolean, userIds: readonly string[], displayName: string): ServiceResult {
+    const event = this.db.getActiveEvent(chatId);
+    if (!event) return { success: false, messageKey: 'noActiveEvent' };
+
+    const participant = this.displayList(event.id).find(p => userIds.includes(p.user_id));
+    if (!participant) {
+      return this.leaveByName(chatId, requesterId, isAdmin, displayName);
+    }
+
+    return this.withdrawTarget(event, participant, requesterId, isAdmin);
+  }
+
+  /**
+   * The single authorization gate for removing a resolved participant, shared
+   * by every targeted path so index, name and mention can never disagree.
+   */
+  private withdrawTarget(event: WhatsAppEvent, participant: Participant, requesterId: string, isAdmin: boolean): ServiceResult {
     const isSelf = participant.user_id === requesterId;
     const isMyGuest = participant.invited_by === requesterId;
 
@@ -260,7 +316,7 @@ export class EventService {
     return this.performWithdrawal(event, participant, requesterId);
   }
 
-  private performWithdrawal(event: any, participant: Participant, requesterId?: string): ServiceResult {
+  private performWithdrawal(event: WhatsAppEvent, participant: Participant, requesterId?: string): ServiceResult {
     if (event.groups_triggered && !this.db.getNextInWaitlist(event.id)) {
       return { success: false, messageKey: 'leaveLockedNoWaitlist' };
     }

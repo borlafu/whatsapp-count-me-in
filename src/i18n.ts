@@ -15,7 +15,13 @@ export interface MessageTemplates {
   eventScheduled: (title: string, slots: number, dateStr: string) => string;
   activeEventExists: () => string;
 
+  // Argument safeguards
+  unexpectedArgs: (extra: string, usage: string) => string;
+  unknownCommand: (typed: string, suggestion: string) => string;
+
   // Join
+  joinUsage: () => string;
+  waitlistUsage: () => string;
   noActiveEvent: () => string;
   alreadyJoined: () => string;
   alreadyWaitlisted: () => string;
@@ -26,12 +32,15 @@ export interface MessageTemplates {
   registrationsClosed: () => string;
 
   // Leave
+  leaveUsage: () => string;
   notSignedUp: () => string;
   leaveLockedNoWaitlist: () => string;
   withdrawn: (mention: string, title: string) => string;
   guestWithdrawn: (guestName: string, title: string, inviterName: string) => string;
   notAuthorizedToLeave: () => string;
   leaveIndexInvalid: () => string;
+  leaveNameNotFound: (name: string) => string;
+  leaveNameAmbiguous: (name: string, options: string) => string;
 
   // Resize
   resizeUsage: () => string;
@@ -43,6 +52,8 @@ export interface MessageTemplates {
   eventRenamed: (oldTitle: string, newTitle: string) => string;
 
   // Cancel
+  cancelUsage: () => string;
+  concludeUsage: () => string;
   noActiveEventCancel: () => string;
   noActiveEventConclude: () => string;
   concludeBeforeEventTime: () => string;
@@ -50,6 +61,7 @@ export interface MessageTemplates {
   eventConcluded: (title: string) => string;
 
   // Status
+  statusUsage: () => string;
   noActiveEventStatus: () => string;
   statusHeader: (title: string) => string;
   statusSlots: (joined: number, total: number) => string;
@@ -70,6 +82,7 @@ export interface MessageTemplates {
   statusGuest: (guestName: string, inviterName: string) => string;
 
   // Groups
+  groupsUsage: () => string;
   groupsHeader: (size: number) => string;
   groupLabel: (index: number) => string;
   groupsNotEnough: () => string;
@@ -98,6 +111,7 @@ export interface MessageTemplates {
   gapMonths: (n: number) => string;
 
   // Help
+  helpUsage: () => string;
   helpMessage: () => string;
 }
 
@@ -111,6 +125,10 @@ const messages: Record<Locale, MessageTemplates> = {
     eventCreated: (title, slots) => `✅ Event "${title}" created!\nSlots: ${slots}\nUse !join to sign up.`,
     eventScheduled: (title, slots, dateStr) => `✅ Event "${title}" created!\nSlots: ${slots}\n📅 ${dateStr}\nUse !join to sign up.`,
     activeEventExists: () => 'There is already an active event in this group.',
+    unexpectedArgs: (extra, usage) => `⚠️ I did not understand "${extra}", so I did nothing.\n${usage}`,
+    unknownCommand: (typed, suggestion) => `❓ "${typed}" is not a command. Did you mean ${suggestion}?`,
+    joinUsage: () => 'Usage: !join — no arguments. To sign up someone else: !invite "Name" or !invite @member',
+    waitlistUsage: () => 'Usage: !waitlist — no arguments.',
     noActiveEvent: () => 'No active event in this group.',
     alreadyJoined: () => 'You are already signed up.',
     alreadyWaitlisted: () => 'You are already on the waitlist.',
@@ -119,12 +137,18 @@ const messages: Record<Locale, MessageTemplates> = {
     confirmedSpot: (mention, title) => `✅ @${mention}, you have confirmed your spot in "${title}"!`,
     eventFullNoWaitlist: () => 'Sorry, the event is full and waitlist is disabled.',
     registrationsClosed: () => 'Registrations are closed for this event.',
+    leaveUsage: () => 'Usage: !leave  |  !leave <number>  |  !leave "Name"  |  !leave @member',
     notSignedUp: () => 'You are not signed up for this event.',
     leaveLockedNoWaitlist: () => "You can't leave because there's no one on the waitlist to take your spot.",
     withdrawn: (mention, title) => `❌ @${mention}, you have withdrawn from "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (inviter: ${inviterName}) has been withdrawn from "${title}".`,
     notAuthorizedToLeave: () => 'You can only remove yourself or your own guests.',
     leaveIndexInvalid: () => 'Invalid number. Please check the current !status.',
+    leaveNameNotFound: (name) => `Nobody called "${name}" is signed up. Please check the current !status.`,
+    leaveNameAmbiguous: (name, options) =>
+      `"${name}" matches more than one person: ${options}. Use the number from !status instead, e.g. !leave 3.`,
+    cancelUsage: () => 'Usage: !cancel — no arguments.',
+    concludeUsage: () => 'Usage: !conclude — no arguments.',
     noActiveEventCancel: () => 'No active event to cancel.',
     noActiveEventConclude: () => 'No active event to conclude.',
     concludeBeforeEventTime: () => 'This event has not happened yet, so it cannot be concluded. It will close by itself at its scheduled time. Use !cancel to call it off, or !reschedule to move it.',
@@ -135,6 +159,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventResized: (title, slots) => `✅ Event "${title}" updated to ${slots} slot(s).`,
     renameUsage: () => 'Usage: !rename "New Title"',
     eventRenamed: (oldTitle, newTitle) => `✅ Event renamed from "${oldTitle}" to "${newTitle}".`,
+    statusUsage: () => 'Usage: !status — no arguments.',
     noActiveEventStatus: () => 'No active event.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Slots: ${joined}/${total}`,
@@ -149,6 +174,7 @@ const messages: Record<Locale, MessageTemplates> = {
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invited by ${inviterName}) has joined "${title}".`,
     guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invited by ${inviterName}) has been added to the waitlist for "${title}".`,
     statusGuest: (guestName, inviterName) => `${guestName} (${inviterName}'s guest)`,
+    groupsUsage: () => 'Usage: !groups [size]',
     groupsHeader: (size) => `Random Groups (of ${size}):`,
     groupLabel: (index) => `Group ${index}:`,
     groupsNotEnough: () => 'Need at least 2 joined participants to form groups.',
@@ -168,12 +194,13 @@ const messages: Record<Locale, MessageTemplates> = {
     streakLost: (mention, count) => `💔 @${mention}, you have lost your streak of ${count} events.`,
     gapWeeks: (n) => `${n} ${n === 1 ? 'week' : 'weeks'}`,
     gapMonths: (n) => `${n} ${n === 1 ? 'month' : 'months'}`,
+    helpUsage: () => 'Usage: !help — no arguments.',
     helpMessage: () =>
       `📖 *Count Me In — Commands*\n\n` +
       `*!create "Title" <slots> [date time TZ] [--close-and-group Xh]*  — Create an event (admin only)\n` +
       `*!join*  — Sign up for the active event\n` +
       `*!waitlist*  — Join the waitlist directly\n` +
-      `*!leave [number]*  — Withdraw yourself or your guest (by index)\n` +
+      `*!leave [number | name | @member]*  — Withdraw yourself, your guest, or (as admin) anyone\n` +
       `*!status*  — View event status & participants\n` +
       `*!invite "Name"*  — Invite a guest by name\n` +
       `*!resize <slots>*  — Update max slots (admin only)\n` +
@@ -184,7 +211,8 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!cancel*  — Cancel the active event (admin only)\n` +
       `*!lang en|es*  — Change bot language (admin only)\n` +
       `*!groups [size]*  — Randomly assign participants into groups (admin only)\n` +
-      `*!help*  — Show this message`,
+      `*!help*  — Show this message\n\n` +
+      `You can also write *! join* with a space, *@mention me* instead of the *!*, or reply to any of my messages with just the command.`,
   },
   es: {
     adminOnly: () => 'Solo los administradores del grupo pueden hacer esto.',
@@ -195,6 +223,10 @@ const messages: Record<Locale, MessageTemplates> = {
     eventCreated: (title, slots) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\nUsa !unirse para apuntarte.`,
     eventScheduled: (title, slots, dateStr) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\n📅 ${dateStr}\nUsa !unirse para apuntarte.`,
     activeEventExists: () => 'Ya hay un evento activo en este grupo.',
+    unexpectedArgs: (extra, usage) => `⚠️ No he entendido "${extra}", así que no he hecho nada.\n${usage}`,
+    unknownCommand: (typed, suggestion) => `❓ "${typed}" no es un comando. ¿Querías decir ${suggestion}?`,
+    joinUsage: () => 'Uso: !unirse — sin argumentos. Para apuntar a otra persona: !invitar "Nombre" o !invitar @miembro',
+    waitlistUsage: () => 'Uso: !espera — sin argumentos.',
     noActiveEvent: () => 'No hay ningún evento activo en este grupo.',
     alreadyJoined: () => 'Ya estás apuntado/a.',
     alreadyWaitlisted: () => 'Ya estás en la lista de espera.',
@@ -203,12 +235,18 @@ const messages: Record<Locale, MessageTemplates> = {
     confirmedSpot: (mention, title) => `✅ @${mention}, has confirmado tu plaza en "${title}"!`,
     eventFullNoWaitlist: () => 'Lo sentimos, el evento está lleno y la lista de espera está desactivada.',
     registrationsClosed: () => 'Las inscripciones para este evento están cerradas.',
+    leaveUsage: () => 'Uso: !salir  |  !salir <número>  |  !salir "Nombre"  |  !salir @miembro',
     notSignedUp: () => 'No estás apuntado/a a este evento.',
     leaveLockedNoWaitlist: () => 'No puedes salir porque no hay nadie en la lista de espera que pueda ocupar tu plaza.',
     withdrawn: (mention, title) => `❌ @${mention}, te has retirado de "${title}".`,
     guestWithdrawn: (guestName, title, inviterName) => `❌ ${guestName} (invitante: ${inviterName}) ha sido retirado/a de "${title}".`,
     notAuthorizedToLeave: () => 'Solo puedes retirarte a ti mismo o a tus propios invitados.',
     leaveIndexInvalid: () => 'Número inválido. Por favor revisa el !estado actual.',
+    leaveNameNotFound: (name) => `No hay nadie apuntado con el nombre "${name}". Por favor revisa el !estado actual.`,
+    leaveNameAmbiguous: (name, options) =>
+      `"${name}" coincide con más de una persona: ${options}. Usa mejor el número del !estado, p. ej. !salir 3.`,
+    cancelUsage: () => 'Uso: !cancelar — sin argumentos.',
+    concludeUsage: () => 'Uso: !concluir — sin argumentos.',
     noActiveEventCancel: () => 'No hay ningún evento activo que cancelar.',
     noActiveEventConclude: () => 'No hay ningún evento activo que concluir.',
     concludeBeforeEventTime: () => 'Este evento aún no ha ocurrido, así que no se puede concluir. Se cerrará solo a su hora programada. Usa !cancelar para anularlo, o !reprogramar para moverlo.',
@@ -219,6 +257,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventResized: (title, slots) => `✅ El evento "${title}" ha sido actualizado a ${slots} plaza(s).`,
     renameUsage: () => 'Uso: !renombrar "Nuevo Título"',
     eventRenamed: (oldTitle, newTitle) => `✅ Evento renombrado de "${oldTitle}" a "${newTitle}".`,
+    statusUsage: () => 'Uso: !estado — sin argumentos.',
     noActiveEventStatus: () => 'No hay ningún evento activo.',
     statusHeader: (title) => `📊 *${title}*`,
     statusSlots: (joined, total) => `Plazas: ${joined}/${total}`,
@@ -233,6 +272,7 @@ const messages: Record<Locale, MessageTemplates> = {
     guestJoined: (guestName, inviterName, title) => `✅ ${guestName} (invitado/a por ${inviterName}) se ha unido a "${title}".`,
     guestJoinedWaitlist: (guestName, inviterName, title) => `⏳ ${guestName} (invitado/a por ${inviterName}) ha sido añadido/a a la lista de espera de "${title}".`,
     statusGuest: (guestName, inviterName) => `${guestName} (invitado/a de ${inviterName})`,
+    groupsUsage: () => 'Uso: !grupos [tamaño]',
     groupsHeader: (size) => `Grupos Aleatorios (de ${size}):`,
     groupLabel: (index) => `Grupo ${index}:`,
     groupsNotEnough: () => 'Se necesitan al menos 2 participantes para formar grupos.',
@@ -252,12 +292,13 @@ const messages: Record<Locale, MessageTemplates> = {
     streakLost: (mention, count) => `💔 @${mention}, has perdido tu racha de ${count} eventos.`,
     gapWeeks: (n) => `${n} ${n === 1 ? 'semana' : 'semanas'}`,
     gapMonths: (n) => `${n} ${n === 1 ? 'mes' : 'meses'}`,
+    helpUsage: () => 'Uso: !ayuda — sin argumentos.',
     helpMessage: () =>
       `📖 *Count Me In — Comandos*\n\n` +
       `*!crear "Título" <plazas> [fecha hora TZ] [--close-and-group Xh]*  — Crear un evento (solo admins)\n` +
       `*!unirse*  — Apuntarse al evento activo\n` +
       `*!espera*  — Unirse a la lista de espera\n` +
-      `*!salir [número]*  — Retirarte tú o a tus invitados (por índice)\n` +
+      `*!salir [número | nombre | @miembro]*  — Retirarte tú, a tus invitados o (como admin) a cualquiera\n` +
       `*!estado*  — Ver estado y participantes\n` +
       `*!invitar "Nombre"*  — Invitar a un externo por nombre\n` +
       `*!plazas <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
@@ -268,7 +309,8 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +
       `*!idioma en|es*  — Cambiar idioma del bot (solo admins)\n` +
       `*!grupos [tamaño]*  — Asignar participantes en grupos aleatorios (solo admins)\n` +
-      `*!ayuda*  — Mostrar este mensaje`,
+      `*!ayuda*  — Mostrar este mensaje\n\n` +
+      `También puedes escribir *! unirse* con espacio, *@mencionarme* en lugar del *!*, o responder a cualquiera de mis mensajes solo con el comando.`,
   },
 };
 
