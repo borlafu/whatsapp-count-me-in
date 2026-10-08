@@ -932,6 +932,18 @@ describe('CommandHandler', () => {
       expect(repliedTexts().join('\n')).toContain('Did you mean !salir?');
     });
 
+    it('should suggest for a typo when the bot is mentioned instead of using !', async () => {
+      await handler.handleCommand(createMentionMsg('@bot estadio', [adminId], userId), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('Did you mean !estado?');
+    });
+
+    it('should suggest for a typo in a reply to the bot', async () => {
+      await handler.handleCommand(createReplyMsg('estadio', adminId), mockSock);
+
+      expect(repliedTexts().join('\n')).toContain('Did you mean !estado?');
+    });
+
     it('should stay silent for text that merely starts with !', async () => {
       await handler.handleCommand(createMockMsg('!!! what a game'), mockSock);
 

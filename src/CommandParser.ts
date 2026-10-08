@@ -69,9 +69,11 @@ export class CommandParser {
       return { action, args };
     }
 
-    // Only an explicit "!command" earns a did-you-mean. A bare word in a reply
-    // to the bot is far more likely to be ordinary conversation.
-    if (!rawCommand.startsWith('!') || !COMMAND_WORD.test(word)) {
+    // Every way of addressing the bot earns a did-you-mean, not just "!estadio":
+    // mentioning the bot says who you are talking to as plainly as the "!" does.
+    // Ordinary chatter never reaches this far — it returns above unless the
+    // message opens with a "!" or addresses the bot.
+    if (!COMMAND_WORD.test(word)) {
       return noCommand();
     }
     const suggestion = suggestCommand(word);

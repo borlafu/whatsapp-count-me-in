@@ -162,9 +162,27 @@ describe('CommandParser', () => {
       expect(CommandParser.parse(`!${'a'.repeat(5000)}`).unknown).toBeUndefined();
     });
 
-    it('does not correct a bare word in a reply to the bot', () => {
-      const result = CommandParser.parse('salirr', { botJids: ['bot@s.whatsapp.net'], quotedAuthor: 'bot@s.whatsapp.net' });
+    it('suggests for a typo after a mention of the bot', () => {
+      const botJids = ['bot@s.whatsapp.net'];
+
+      const result = CommandParser.parse('@1234 estadio', { botJids, mentionedJids: botJids });
+
+      expect(result.unknown).toEqual({ typed: 'estadio', suggestion: '!estado' });
+    });
+
+    it('suggests for a typo in a reply to the bot', () => {
+      const botJids = ['bot@s.whatsapp.net'];
+
+      const result = CommandParser.parse('estadio', { botJids, quotedAuthor: 'bot@s.whatsapp.net' });
+
+      expect(result.unknown).toEqual({ typed: 'estadio', suggestion: '!estado' });
+    });
+
+    it('stays silent for a near-command word nobody addressed to the bot', () => {
+      const result = CommandParser.parse('estadio', { botJids: ['bot@s.whatsapp.net'] });
+
       expect(result.unknown).toBeUndefined();
+      expect(result.action).toBeUndefined();
     });
   });
 });
