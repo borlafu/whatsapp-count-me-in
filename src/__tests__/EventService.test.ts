@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EventService } from '../EventService.js';
 import { DatabaseManager } from '../Database.js';
+import { pinToday } from './clock.js';
 
 describe('EventService', () => {
   let db: DatabaseManager;
@@ -30,6 +31,29 @@ describe('EventService', () => {
       const result = service.createEvent(chatId, 'Second Event', 5, adminId);
       expect(result.success).toBe(false);
       expect(result.messageKey).toBe('activeEventExists');
+    });
+
+    it('refuses an event scheduled in the past instead of creating it', () => {
+      const past = new Date(Date.now() - 60_000).toISOString();
+
+      const result = service.createEvent(chatId, 'Yesterday', 10, adminId, past, 'UTC');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('eventInPast');
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+    });
+  });
+
+  describe('rescheduleEvent', () => {
+    it('refuses to move the event into the past', () => {
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+      service.createEvent(chatId, 'Match', 10, adminId, future, 'UTC');
+
+      const result = service.rescheduleEvent(chatId, new Date(Date.now() - 60_000).toISOString(), 'UTC');
+
+      expect(result.success).toBe(false);
+      expect(result.messageKey).toBe('eventInPast');
+      expect(db.getActiveEvent(chatId)?.event_at).toBe(future);
     });
   });
 
@@ -782,7 +806,7 @@ describe('EventService concludeEvent guards the scheduled time', () => {
   });
 
   it('concludes an event whose scheduled time has passed', () => {
-    service.createEvent(chatId, 'Last Friday', 10, adminId, past(), 'UTC');
+    db.createEvent(chatId, 'Last Friday', 10, true, adminId, past(), 'UTC');
 
     expect(service.concludeEvent(chatId).success).toBe(true);
     expect(db.getActiveEvent(chatId)).toBeUndefined();
@@ -847,7 +871,7 @@ describe('EventService promotions and attendance history', () => {
    * counts towards history, which ignores undated events.
    */
   function anaPending(): void {
-    service.createEvent(chatId, 'This Week', 1, adminId, new Date(Date.now() - 60_000).toISOString(), 'UTC');
+    db.createEvent(chatId, 'This Week', 1, true, adminId, new Date(Date.now() - 60_000).toISOString(), 'UTC');
     service.joinEvent(chatId, bob, 'Bob');
     service.joinEvent(chatId, ana, 'Ana');
     service.leaveEvent(chatId, bob);
@@ -1076,6 +1100,8 @@ describe('EventService never contradicts a streak-lost warning', () => {
 });
 
 describe('EventService resolves the locale from the chat', () => {
+  pinToday();
+
   let db: DatabaseManager;
   let service: EventService;
 

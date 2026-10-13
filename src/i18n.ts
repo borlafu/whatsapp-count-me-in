@@ -14,6 +14,7 @@ export interface MessageTemplates {
   eventCreated: (title: string, slots: number) => string;
   eventScheduled: (title: string, slots: number, dateStr: string) => string;
   activeEventExists: () => string;
+  eventInPast: () => string;
 
   // Argument safeguards
   unexpectedArgs: (extra: string, usage: string) => string;
@@ -125,6 +126,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventCreated: (title, slots) => `✅ Event "${title}" created!\nSlots: ${slots}\nUse !join to sign up.`,
     eventScheduled: (title, slots, dateStr) => `✅ Event "${title}" created!\nSlots: ${slots}\n📅 ${dateStr}\nUse !join to sign up.`,
     activeEventExists: () => 'There is already an active event in this group.',
+    eventInPast: () => '⚠️ That date and time has already passed. Pick a future date for the event.',
     unexpectedArgs: (extra, usage) => `⚠️ I did not understand "${extra}", so I did nothing.\n${usage}`,
     unknownCommand: (typed, suggestion) => `❓ "${typed}" is not a command. Did you mean ${suggestion}?`,
     joinUsage: () => 'Usage: !join — no arguments. To sign up someone else: !invite "Name" or !invite @member',
@@ -223,6 +225,7 @@ const messages: Record<Locale, MessageTemplates> = {
     eventCreated: (title, slots) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\nUsa !unirse para apuntarte.`,
     eventScheduled: (title, slots, dateStr) => `✅ Evento "${title}" creado!\nPlazas: ${slots}\n📅 ${dateStr}\nUsa !unirse para apuntarte.`,
     activeEventExists: () => 'Ya hay un evento activo en este grupo.',
+    eventInPast: () => '⚠️ Esa fecha y hora ya han pasado. Elige una fecha futura para el evento.',
     unexpectedArgs: (extra, usage) => `⚠️ No he entendido "${extra}", así que no he hecho nada.\n${usage}`,
     unknownCommand: (typed, suggestion) => `❓ "${typed}" no es un comando. ¿Querías decir ${suggestion}?`,
     joinUsage: () => 'Uso: !unirse — sin argumentos. Para apuntar a otra persona: !invitar "Nombre" o !invitar @miembro',
