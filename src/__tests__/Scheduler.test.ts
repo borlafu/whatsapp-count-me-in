@@ -32,7 +32,7 @@ describe('Scheduler', () => {
   describe('auto-conclude', () => {
     it('should conclude an event whose scheduled time has passed', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Past Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Past Event', 10, true, adminId, eventAt, 'UTC');
 
       // "now" is after the event time
       const nowMs = Date.parse('2026-04-15T18:01:00.000Z');
@@ -53,7 +53,7 @@ describe('Scheduler', () => {
 
     it('should not cancel an event that is still in the future', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Future Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Future Event', 10, true, adminId, eventAt, 'UTC');
 
       const nowMs = Date.parse('2026-04-15T10:00:00.000Z');
       const s = createScheduler(nowMs);
@@ -69,7 +69,7 @@ describe('Scheduler', () => {
     it('should trigger groups when within the offset window', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
       // close-and-group 1h before event = triggers at 17:00
-      eventService.createEvent(chatId, 'Group Event', 10, adminId, eventAt, 'UTC', 60);
+      db.createEvent(chatId, 'Group Event', 10, true, adminId, eventAt, 'UTC', 60);
 
       // Add participants so groups can form
       const event = db.getActiveEvent(chatId)!;
@@ -100,7 +100,7 @@ describe('Scheduler', () => {
 
     it('should not trigger groups when outside the offset window', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Group Event', 10, adminId, eventAt, 'UTC', 60);
+      db.createEvent(chatId, 'Group Event', 10, true, adminId, eventAt, 'UTC', 60);
 
       const event = db.getActiveEvent(chatId)!;
       db.addParticipant(event.id, 'u1@s.whatsapp.net', 'User 1', 'joined');
@@ -117,7 +117,7 @@ describe('Scheduler', () => {
 
     it('should not trigger groups twice (groups_triggered flag)', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Group Event', 10, adminId, eventAt, 'UTC', 60);
+      db.createEvent(chatId, 'Group Event', 10, true, adminId, eventAt, 'UTC', 60);
 
       const event = db.getActiveEvent(chatId)!;
       db.addParticipant(event.id, 'u1@s.whatsapp.net', 'User 1', 'joined');
@@ -140,7 +140,7 @@ describe('Scheduler', () => {
 
     it('should block joins after groups are triggered', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Group Event', 10, adminId, eventAt, 'UTC', 60);
+      db.createEvent(chatId, 'Group Event', 10, true, adminId, eventAt, 'UTC', 60);
 
       const event = db.getActiveEvent(chatId)!;
       db.addParticipant(event.id, 'u1@s.whatsapp.net', 'User 1', 'joined');
@@ -167,7 +167,7 @@ describe('Scheduler', () => {
   describe('daily reminders', () => {
     it('should send a reminder at 09:00 UTC', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
 
       // "now" is 09:00 UTC on April 15
       const nowMs = Date.parse('2026-04-15T09:00:00.000Z');
@@ -187,7 +187,7 @@ describe('Scheduler', () => {
 
     it('should send a reminder at 09:01 UTC (within window)', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
 
       // "now" is 09:01 UTC — should still trigger
       const nowMs = Date.parse('2026-04-15T09:01:30.000Z');
@@ -203,7 +203,7 @@ describe('Scheduler', () => {
 
     it('should not send a reminder outside the 09:00 window', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
 
       const nowMs = Date.parse('2026-04-15T10:00:00.000Z');
       const s = createScheduler(nowMs);
@@ -215,7 +215,7 @@ describe('Scheduler', () => {
 
     it('should not send duplicate reminders on the same day', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
 
       // First tick at 09:00
       const nowMs = Date.parse('2026-04-15T09:00:00.000Z');
@@ -237,7 +237,7 @@ describe('Scheduler', () => {
 
     it('should send reminders on different days', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
 
       // Day 1
       const s1 = createScheduler(Date.parse('2026-04-15T09:00:00.000Z'));
@@ -257,7 +257,7 @@ describe('Scheduler', () => {
 
     it('should not send reminders when disabled', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Reminder Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Reminder Event', 10, true, adminId, eventAt, 'UTC');
       db.setRemindersEnabled(chatId, false);
 
       const nowMs = Date.parse('2026-04-15T09:00:00.000Z');
@@ -270,7 +270,7 @@ describe('Scheduler', () => {
 
     it('should not send a reminder on the same UTC day as the event', () => {
       const eventAt = '2026-04-15T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Same Day Event', 10, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Same Day Event', 10, true, adminId, eventAt, 'UTC');
 
       // "now" is 09:00 UTC on the event day
       const nowMs = Date.parse('2026-04-15T09:00:00.000Z');
@@ -283,7 +283,7 @@ describe('Scheduler', () => {
 
     it('should not send a reminder after the draw has taken place', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Drawn Event', 10, adminId, eventAt, 'UTC', 60);
+      db.createEvent(chatId, 'Drawn Event', 10, true, adminId, eventAt, 'UTC', 60);
 
       // Simulate draw already done
       const event = db.getActiveEvent(chatId)!;
@@ -299,7 +299,7 @@ describe('Scheduler', () => {
 
     it('should include available slots and countdown in reminder', () => {
       const eventAt = '2026-04-20T18:00:00.000Z';
-      eventService.createEvent(chatId, 'Slots Event', 5, adminId, eventAt, 'UTC');
+      db.createEvent(chatId, 'Slots Event', 5, true, adminId, eventAt, 'UTC');
 
       const event = db.getActiveEvent(chatId)!;
       db.addParticipant(event.id, 'u1@s.whatsapp.net', 'User 1', 'joined');

@@ -51,6 +51,10 @@ export interface ServiceCheer {
   mentions: string[];
 }
 
+function isPast(isoDate: string): boolean {
+  return Date.parse(isoDate) <= Date.now();
+}
+
 /** Guest sign-ups get a synthetic id per invite, so they have no history to read. */
 function isGuestId(userId: string): boolean {
   return userId.startsWith('guest:');
@@ -64,6 +68,10 @@ export class EventService {
     const existing = this.db.getActiveEvent(chatId);
     if (existing) {
       return { success: false, messageKey: 'activeEventExists', locale };
+    }
+    // A past date would be auto-concluded by the Scheduler seconds later.
+    if (eventAt && isPast(eventAt)) {
+      return { success: false, messageKey: 'eventInPast', locale };
     }
 
     this.db.createEvent(chatId, title, slots, true, userId, eventAt, timezone, closeAndGroupOffsetMin);
@@ -79,6 +87,7 @@ export class EventService {
     const locale = this.db.getLocale(chatId);
     const event = this.db.getActiveEvent(chatId);
     if (!event) return { success: false, messageKey: 'noActiveEvent', locale };
+    if (isPast(eventAt)) return { success: false, messageKey: 'eventInPast', locale };
     this.db.updateEventSchedule(event.id, eventAt, timezone, closeAndGroupOffsetMin);
     const dateStr = formatEventDate(eventAt, timezone, locale);
     return { success: true, messageKey: 'eventRescheduled', params: [dateStr], locale };

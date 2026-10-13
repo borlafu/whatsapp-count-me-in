@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommandHandler } from '../CommandHandler.js';
 import { EventService } from '../EventService.js';
 import { DatabaseManager } from '../Database.js';
+import { pinToday } from './clock.js';
 
 // Mocking the Baileys types and utilities
 vi.mock('@whiskeysockets/baileys', () => ({
@@ -1106,6 +1107,8 @@ describe('CommandHandler', () => {
   });
 
   describe('!create with scheduling', () => {
+    pinToday();
+
     it('should create a scheduled event', async () => {
       mockSock.groupMetadata.mockResolvedValue({
         participants: [{ id: adminId, admin: 'admin' }]
@@ -1135,6 +1138,20 @@ describe('CommandHandler', () => {
       expect(event?.close_and_group_offset_min).toBe(60);
     });
 
+    it('should refuse an event scheduled in the past', async () => {
+      mockSock.groupMetadata.mockResolvedValue({
+        participants: [{ id: adminId, admin: 'admin' }]
+      });
+
+      const msg = createMockMsg('!create "Match" 10 2020-01-01 18:00 UTC', true, adminId);
+      await handler.handleCommand(msg, mockSock);
+
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('already passed')
+      }), expect.anything());
+    });
+
     it('should show usage when timezone is missing', async () => {
       mockSock.groupMetadata.mockResolvedValue({
         participants: [{ id: adminId, admin: 'admin' }]
@@ -1149,6 +1166,8 @@ describe('CommandHandler', () => {
   });
 
   describe('!reschedule', () => {
+    pinToday();
+
     it('should deny non-admin', async () => {
       mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
       service.createEvent(chatId, 'Event', 10, adminId, '2026-04-15T18:00:00.000Z', 'UTC');
@@ -1413,6 +1432,8 @@ describe('CommandHandler participation cheers', () => {
 });
 
 describe('CommandHandler date locale', () => {
+  pinToday();
+
   let db: DatabaseManager;
   let service: EventService;
   let handler: CommandHandler;
@@ -1574,6 +1595,8 @@ describe('CommandHandler !conclude', () => {
 });
 
 describe('CommandHandler renders a reply in one language', () => {
+  pinToday();
+
   let db: DatabaseManager;
   let service: EventService;
   let handler: CommandHandler;
