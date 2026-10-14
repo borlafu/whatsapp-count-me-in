@@ -86,9 +86,11 @@ jobs:
             # The pm2 daemon keeps running under whichever Node and whichever
             # pm2 spawned it, so after either is bumped the CLI and the daemon
             # disagree. `pm2 update` fixes that, but it kills the daemon and
-            # resurrects every app, so it must not run on an ordinary deploy:
-            # that would take the bot down and then `pm2 reload` would restart
-            # it a second time. Compare the daemon's own interpreter to decide.
+            # resurrects every app, so it must not run on an ordinary deploy,
+            # where only `pm2 reload` restarts the bot. When pm2 was reinstalled
+            # or the daemon's Node differs, `pm2 update` resurrects the app and
+            # the reload below restarts it once more: two restarts, expected
+            # once per Node/pm2 bump. Compare the daemon's interpreter to decide.
             DAEMON_NODE=""
             if [ -f "$HOME/.pm2/pm2.pid" ]; then
               DAEMON_NODE="$(readlink -f "/proc/$(cat "$HOME/.pm2/pm2.pid")/exe" 2>/dev/null || true)"
@@ -116,7 +118,7 @@ jobs:
               if sudo -n env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$(id -un)" --hp "$HOME"; then
                 echo "pm2 systemd unit refreshed for $(node -v)"
               else
-                echo "ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)" >&2
+                echo "::warning::ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)" >&2
               fi
             fi
 
