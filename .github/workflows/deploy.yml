@@ -98,7 +98,7 @@ jobs:
             PM2_RESPAWNED=0
             if [ "$PM2_REINSTALLED" = 1 ] || { [ -n "$DAEMON_NODE" ] && [ "$DAEMON_NODE" != "$(readlink -f "$(command -v node)")" ]; }; then
               echo "Respawning the pm2 daemon on $(node -v) (was: ${DAEMON_NODE:-not running})"
-              pm2 update
+              pm2 update || echo "::warning::pm2 update failed; pm2 reload will start the app"
               PM2_RESPAWNED=1
             fi
 

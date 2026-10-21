@@ -185,7 +185,7 @@ We provide a minimalist Docker image leveraging Alpine/Slim Node images.
    pm2 logs whatsapp-count-me-in
    ```
 
-> **After a Node version bump (any `.nvmrc` change),** PM2 needs three extra steps, because nvm installs
+> **After a Node version bump (any `.nvmrc` change),** PM2 needs four extra steps, because nvm installs
 > each exact version into its own prefix: reinstall the global binary (`npm install -g pm2@<PM2_VERSION from deploy.yml>`), respawn the daemon on the
 > new runtime (`pm2 update`, then `pm2 save`), and regenerate the boot unit (`pm2 startup`) since it
 > hardcodes the path of the Node binary that created it. The deploy workflow handles the first two
