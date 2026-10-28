@@ -66,7 +66,7 @@ jobs:
             # pin and the installed version disagree, so a redeploy is a no-op
             # but a bumped pin is followed. Pinning pm2 keeps production from
             # drifting onto whatever pm2@latest happens to be that day.
-            PM2_VERSION=7.0.4
+            PM2_VERSION=7.1.1
             PM2_REINSTALLED=0
             if [ "$(pm2 --version 2>/dev/null)" != "$PM2_VERSION" ]; then
               npm install -g "pm2@$PM2_VERSION"
@@ -98,7 +98,9 @@ jobs:
             PM2_RESPAWNED=0
             if [ "$PM2_REINSTALLED" = 1 ] || { [ -n "$DAEMON_NODE" ] && [ "$DAEMON_NODE" != "$(readlink -f "$(command -v node)")" ]; }; then
               echo "Respawning the pm2 daemon on $(node -v) (was: ${DAEMON_NODE:-not running})"
-              pm2 update || echo "::warning::pm2 update failed; pm2 reload will start the app"
+              # Time-boxed: `pm2 update` can hang from non-interactive scripts
+              # (Unitech/pm2#5000); a timeout falls through to the warning.
+              timeout 120 pm2 update || echo "::warning::pm2 update failed; pm2 reload will start the app"
               PM2_RESPAWNED=1
             fi
 

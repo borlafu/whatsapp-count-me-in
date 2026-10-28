@@ -53,10 +53,10 @@ A command never runs with arguments it does not understand. `!leave Juanlu` remo
 ## Running Locally
 
 Requires Node.js 26 or newer (`nvm use` picks the right version up from `.nvmrc`) and pnpm.
-`.nvmrc` pins an exact patch rather than the bare major, because 26 is still a Current release
-line until it is promoted to active LTS on 2026-10-28, and an unpinned `nvm install` during a
-deploy would roll production onto whichever 26.x shipped that week. Bump the pin deliberately
-for security releases, and relax it back to `26` once the line is LTS.
+`.nvmrc` pins an exact patch rather than the bare major, because an unpinned `nvm install` during a
+deploy would roll production onto whichever 26.x shipped that week. Node 26 is Active LTS
+("Lithium") since 2026-10-28. Dependabot ignores Node minor/patch bumps, so bump the pin by hand,
+together with both `FROM node:` lines in the `Dockerfile` (CI checks they match).
 
 Node 26 no longer bundles corepack, so install the pinned pnpm yourself:
 
