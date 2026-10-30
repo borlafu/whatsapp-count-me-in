@@ -55,12 +55,6 @@ jobs:
             git reset --hard origin/main
             nvm install
             nvm use
-            # nvm gives every exact Node version its own prefix, so globally
-            # installed packages do not carry over: every .nvmrc bump
-            # reinstalls pm2 and triggers one `pm2 update` below. Without the
-            # alias a plain SSH session or a reboot would still land on the
-            # previous version.
-            nvm alias default "$(cat .nvmrc)"
 
             # pm2 and pnpm are both pinned and both reinstalled only when the
             # pin and the installed version disagree, so a redeploy is a no-op
@@ -100,8 +94,13 @@ jobs:
               echo "Respawning the pm2 daemon on $(node -v) (was: ${DAEMON_NODE:-not running})"
               # Time-boxed: `pm2 update` can hang from non-interactive scripts
               # (Unitech/pm2#5000); a timeout falls through to the warning.
-              timeout 120 pm2 update || echo "::warning::pm2 update failed; pm2 reload will start the app"
-              PM2_RESPAWNED=1
+              # The flag is set only on success, so a failed update does not
+              # make the systemd refresh below claim a respawn on this Node.
+              if timeout 120 pm2 update; then
+                PM2_RESPAWNED=1
+              else
+                echo "::warning::pm2 update failed; pm2 reload will start the app"
+              fi
             fi
 
             pm2 reload ecosystem.config.cjs --update-env
@@ -120,9 +119,17 @@ jobs:
               if sudo -n env PATH="$PATH" "$(command -v pm2)" startup systemd -u "$(id -un)" --hp "$HOME"; then
                 echo "pm2 systemd unit refreshed for $(node -v)"
               else
-                echo "::warning::ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)" >&2
+                echo "::warning::ACTION REQUIRED: run 'pm2 startup' with sudo on the VM to refresh the systemd unit for $(node -v)"
               fi
             fi
+
+            # Moved last so a failed deploy leaves the default Node untouched.
+            # nvm gives every exact Node version its own prefix, so globally
+            # installed packages do not carry over: every .nvmrc bump
+            # reinstalls pm2 and triggers one `pm2 update` above. Without the
+            # alias a plain SSH session or a reboot would still land on the
+            # previous version. Everything above uses `nvm use`, not the alias.
+            nvm alias default "$(cat .nvmrc)"
 
       - name: Update Deployment Status
         if: always()

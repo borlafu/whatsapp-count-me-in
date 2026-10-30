@@ -1,6 +1,6 @@
 # ==== Build Stage ====
 # Keep this tag in sync with .nvmrc: bump both together.
-FROM node:26.12.1-alpine3.24 AS builder
+FROM node:26.13.0-alpine3.24 AS builder
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ RUN pnpm prune --prod
 RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.exec('CREATE TABLE t(a)');d.close();console.log('better-sqlite3 OK')"
 
 # ==== Production Stage ====
-FROM node:26.12.1-alpine3.24
+FROM node:26.13.0-alpine3.24
 
 # Use tini to manage PID 1 so Ctrl+C propagates gracefully
 RUN apk add --no-cache tini
