@@ -142,6 +142,38 @@ export function parseOffsetToMinutes(s: string): number | null {
   return (parseInt(match[1] ?? '0') * 60) + parseInt(match[2] ?? '0');
 }
 
+/** Parses a period like "3d" or "2w" into days. Returns null if invalid. */
+export function parsePeriodToDays(s: string): number | null {
+  const match = s.trim().match(/^(\d+)([dw])$/i);
+  if (!match) return null;
+  const days = Number(match[1]) * (match[2]!.toLowerCase() === 'w' ? 7 : 1);
+  return Number.isSafeInteger(days) && days > 0 ? days : null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Moves an event `days` calendar days later, keeping its wall-clock time in
+ * `timezone`: a 19:00 game stays at 19:00 across a DST change, where adding
+ * 24h multiples to the UTC instant would drift it to 18:00 or 20:00.
+ */
+export function addDaysLocal(eventAt: string, timezone: string, days: number): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(eventAt));
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
+
+  const day = new Date(Date.UTC(Number(p['year']), Number(p['month']) - 1, Number(p['day']) + days))
+    .toISOString().slice(0, 10);
+  // null only when the shifted local time falls in a DST gap; plain 24h steps are close enough then.
+  return localToUtc(day, `${p['hour']}:${p['minute']}`, timezone)
+    ?? new Date(Date.parse(eventAt) + days * DAY_MS).toISOString();
+}
+
 /**
  * Formats bare international digits (as found in a WhatsApp JID) for display,
  * e.g. "34699829036" -> "+34 699 82 90 36". Returns the input unchanged when

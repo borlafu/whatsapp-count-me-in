@@ -5,7 +5,7 @@ import { t, type Locale, type MessageTemplates } from './i18n.js';
 import { CommandParser } from './CommandParser.js';
 import { commandSpec } from './commandSpecs.js';
 import type { EventService, ServiceResult } from './EventService.js';
-import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatGroups } from './formatters.js';
+import { localToUtc, formatEventDate, formatCountdown, parseOffsetToMinutes, parsePeriodToDays, parsePositiveInt, formatGroups } from './formatters.js';
 import { collectMemberJids, findParticipant, rememberMemberName, resolveMemberName } from './memberNames.js';
 
 /** One @mention, paired with the display name the sender's client wrote for it. */
@@ -110,6 +110,9 @@ export class CommandHandler {
         case 'reschedule':
           await this.handleReschedule(msg, chatId, senderId, args, sock, locale);
           break;
+        case 'repeat':
+          await this.handleRepeat(msg, chatId, senderId, args, sock, locale);
+          break;
         case 'reminders':
           await this.handleReminders(msg, chatId, senderId, args, sock, locale);
           break;
@@ -213,6 +216,18 @@ export class CommandHandler {
     }
 
     const result = this.eventService.rescheduleEvent(chatId, utc, tz, closeAndGroupOffsetMin);
+    await this.safeReply(msg, chatId, sock, t(result.locale ?? locale, result.messageKey as any, ...(result.params || [])));
+  }
+
+  private async handleRepeat(msg: WAMessage, chatId: string, userId: string, args: string[], sock: WASocket, locale: Locale) {
+    if (!(await this.isAdmin(chatId, userId, sock))) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'adminOnly'));
+    }
+    const days = parsePeriodToDays(args[0] ?? '1w');
+    if (days === null) {
+      return await this.safeReply(msg, chatId, sock, t(locale, 'repeatUsage'));
+    }
+    const result = this.eventService.repeatEvent(chatId, userId, days);
     await this.safeReply(msg, chatId, sock, t(result.locale ?? locale, result.messageKey as any, ...(result.params || [])));
   }
 

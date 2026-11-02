@@ -90,6 +90,10 @@ export interface MessageTemplates {
   groupsInvalidSize: () => string;
   closedForGroups: (title: string) => string;
 
+  // Repeat
+  repeatUsage: () => string;
+  noEventToRepeat: () => string;
+
   // Reschedule
   rescheduleUsage: () => string;
   eventRescheduled: (dateStr: string) => string;
@@ -182,6 +186,8 @@ const messages: Record<Locale, MessageTemplates> = {
     groupsNotEnough: () => 'Need at least 2 joined participants to form groups.',
     groupsInvalidSize: () => 'Group size must be a number 2 or greater. Usage: !groups [size]',
     closedForGroups: (title) => `🔒 Registrations for "${title}" are now closed. Here are the groups:`,
+    repeatUsage: () => 'Usage: !repeat [Nd|Nw] — e.g. !repeat, !repeat 2w, !repeat 3d (default 1w)',
+    noEventToRepeat: () => 'No previous scheduled event to repeat in this group.',
     rescheduleUsage: () => 'Usage: !reschedule YYYY-MM-DD HH:MM Timezone [--close-and-group Xh]',
     eventRescheduled: (dateStr) => `📅 Event rescheduled to ${dateStr}.`,
     remindersUsage: () => 'Usage: !reminders on|off',
@@ -208,6 +214,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!resize <slots>*  — Update max slots (admin only)\n` +
       `*!rename "New Title"*  — Rename the active event (admin only)\n` +
       `*!reschedule YYYY-MM-DD HH:MM TZ*  — Update event date/time (admin only)\n` +
+      `*!repeat [Nd|Nw]*  — Recreate the last event 1 week later, or after the given period (admin only)\n` +
       `*!reminders on|off*  — Toggle daily reminders (admin only)\n` +
       `*!conclude*  — Mark the active event as finished (admin only)\n` +
       `*!cancel*  — Cancel the active event (admin only)\n` +
@@ -281,6 +288,8 @@ const messages: Record<Locale, MessageTemplates> = {
     groupsNotEnough: () => 'Se necesitan al menos 2 participantes para formar grupos.',
     groupsInvalidSize: () => 'El tamaño del grupo debe ser un número de 2 o mayor. Uso: !grupos [tamaño]',
     closedForGroups: (title) => `🔒 Las inscripciones para "${title}" están cerradas. Aquí están los grupos:`,
+    repeatUsage: () => 'Uso: !repetir [Nd|Nw] — p. ej. !repetir, !repetir 2w, !repetir 3d (por defecto 1w)',
+    noEventToRepeat: () => 'No hay ningún evento programado anterior que repetir en este grupo.',
     rescheduleUsage: () => 'Uso: !reprogramar YYYY-MM-DD HH:MM Zona [--close-and-group Xh]',
     eventRescheduled: (dateStr) => `📅 Evento reprogramado para ${dateStr}.`,
     remindersUsage: () => 'Uso: !recordatorios on|off',
@@ -307,6 +316,7 @@ const messages: Record<Locale, MessageTemplates> = {
       `*!plazas <plazas>*  — Actualizar plazas máximas (solo admins)\n` +
       `*!renombrar "Nuevo Título"*  — Renombrar el evento activo (solo admins)\n` +
       `*!reprogramar YYYY-MM-DD HH:MM TZ*  — Actualizar fecha/hora (solo admins)\n` +
+      `*!repetir [Nd|Nw]*  — Recrear el último evento 1 semana después, o tras el periodo indicado (solo admins)\n` +
       `*!recordatorios on|off*  — Activar/desactivar recordatorios diarios (solo admins)\n` +
       `*!concluir*  — Marcar el evento activo como finalizado (solo admins)\n` +
       `*!cancelar*  — Cancelar el evento activo (solo admins)\n` +

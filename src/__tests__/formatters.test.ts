@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc, formatAbsenceGap, formatPhoneNumber } from '../formatters.js';
+import { formatCountdown, parseOffsetToMinutes, parsePositiveInt, formatEventDate, localToUtc, formatAbsenceGap, formatPhoneNumber, parsePeriodToDays, addDaysLocal } from '../formatters.js';
 import { t } from '../i18n.js';
 
 describe('parsePositiveInt', () => {
@@ -239,5 +239,41 @@ describe('formatPhoneNumber', () => {
   it('returns the digits unchanged when they are not a possible phone number', () => {
     expect(formatPhoneNumber('123')).toBe('123');
     expect(formatPhoneNumber('')).toBe('');
+  });
+});
+
+describe('parsePeriodToDays', () => {
+  it.each([
+    ['1w', 7],
+    ['2W', 14],
+    ['3d', 3],
+    ['10d', 10],
+  ])('parses %s as %i days', (input, days) => {
+    expect(parsePeriodToDays(input)).toBe(days);
+  });
+
+  it.each(['', 'w', '0w', '0d', '1.5w', '-1w', '1h', '1 w', 'banana'])('returns null for "%s"', input => {
+    expect(parsePeriodToDays(input)).toBeNull();
+  });
+});
+
+describe('addDaysLocal', () => {
+  it('adds whole days in UTC', () => {
+    expect(addDaysLocal('2026-01-12T18:00:00.000Z', 'UTC', 7)).toBe('2026-01-19T18:00:00.000Z');
+  });
+
+  it('keeps the local wall-clock time across the spring DST change', () => {
+    // 19:00 CET (UTC+1) -> 19:00 CEST (UTC+2) after 2026-03-29
+    expect(addDaysLocal('2026-03-23T18:00:00.000Z', 'Europe/Madrid', 7)).toBe('2026-03-30T17:00:00.000Z');
+  });
+
+  it('keeps the local wall-clock time across the autumn DST change', () => {
+    // 19:00 CEST (UTC+2) -> 19:00 CET (UTC+1) after 2026-10-25
+    expect(addDaysLocal('2026-10-19T17:00:00.000Z', 'Europe/Madrid', 7)).toBe('2026-10-26T18:00:00.000Z');
+  });
+
+  it('falls back to 24h steps when the local time lands in a DST gap', () => {
+    // 02:30 CET on 2026-03-22 -> 02:30 on 2026-03-29 does not exist in Madrid
+    expect(addDaysLocal('2026-03-22T01:30:00.000Z', 'Europe/Madrid', 7)).toBe('2026-03-29T01:30:00.000Z');
   });
 });

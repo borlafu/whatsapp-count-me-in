@@ -24,6 +24,7 @@ type UsageKeyName =
   | 'inviteUsage'
   | 'groupsUsage'
   | 'rescheduleUsage'
+  | 'repeatUsage'
   | 'remindersUsage'
   | 'helpUsage';
 
@@ -48,6 +49,8 @@ const specs: Record<string, CommandSpec> = {
   create: { maxArgs: 7, usageKey: 'createUsage' },
   // date, time, timezone, --close-and-group, offset
   reschedule: { maxArgs: 5, usageKey: 'rescheduleUsage' },
+  // period
+  repeat: { maxArgs: 1, usageKey: 'repeatUsage' },
   join: { maxArgs: 0, usageKey: 'joinUsage' },
   waitlist: { maxArgs: 0, usageKey: 'waitlistUsage' },
   leave: { maxArgs: 1, usageKey: 'leaveUsage', mentionDriven: true },

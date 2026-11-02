@@ -14,6 +14,10 @@ describe('commandSpecs', () => {
     expect(commandSpec('create')!.maxArgs).toBe(7);
   });
 
+  it('allows !repeat a single period argument', () => {
+    expect(commandSpec('repeat')!.maxArgs).toBe(1);
+  });
+
   it('allows a fully scheduled !reschedule, flag and all', () => {
     // !reschedule 2026-01-01 20:00 Europe/Madrid --close-and-group 1h
     expect(commandSpec('reschedule')!.maxArgs).toBe(5);

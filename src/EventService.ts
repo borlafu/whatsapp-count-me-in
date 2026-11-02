@@ -1,6 +1,6 @@
 import { DatabaseManager, type Participant, type WhatsAppEvent } from './Database.js';
 import type { Locale, MessageTemplates } from './i18n.js';
-import { formatEventDate, formatAbsenceGap } from './formatters.js';
+import { formatEventDate, formatAbsenceGap, addDaysLocal } from './formatters.js';
 import { t } from './i18n.js';
 import { findByName } from './nameMatch.js';
 import { summarizeHistory, selectJoinCheer, STREAK_LOSS_MIN } from './participation.js';
@@ -81,6 +81,28 @@ export class EventService {
       return { success: true, messageKey: 'eventScheduled', params: [title, slots, dateStr], locale };
     }
     return { success: true, messageKey: 'eventCreated', params: [title, slots], locale };
+  }
+
+  /**
+   * Creates an event as a copy of the chat's latest one, `days` later. When the
+   * latest event is long past, steps forward by the period until the date is
+   * upcoming, so a skipped week does not produce an event in the past.
+   */
+  repeatEvent(chatId: string, userId: string, days: number): ServiceResult {
+    const locale = this.db.getLocale(chatId);
+    if (this.db.getActiveEvent(chatId)) {
+      return { success: false, messageKey: 'activeEventExists', locale };
+    }
+    const last = this.db.getLastEvent(chatId);
+    if (!last?.event_at || !last.timezone) {
+      return { success: false, messageKey: 'noEventToRepeat', locale };
+    }
+
+    let eventAt = addDaysLocal(last.event_at, last.timezone, days);
+    while (isPast(eventAt)) {
+      eventAt = addDaysLocal(eventAt, last.timezone, days);
+    }
+    return this.createEvent(chatId, last.title, last.slots, userId, eventAt, last.timezone, last.close_and_group_offset_min ?? undefined);
   }
 
   rescheduleEvent(chatId: string, eventAt: string, timezone: string, closeAndGroupOffsetMin?: number): ServiceResult {
