@@ -1226,6 +1226,71 @@ describe('CommandHandler', () => {
     });
   });
 
+  describe('!repeat', () => {
+    pinToday();
+
+    const adminSock = () => mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: adminId, admin: 'admin' }] });
+    const concludedEvent = () => {
+      const id = db.createEvent(chatId, 'Padel', 8, true, adminId, '2026-01-12T18:00:00.000Z', 'UTC');
+      db.concludeEvent(id);
+    };
+
+    it('should deny non-admin', async () => {
+      mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });
+      concludedEvent();
+
+      await handler.handleCommand(createMockMsg('!repeat'), mockSock);
+
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Only group admins')
+      }), expect.anything());
+    });
+
+    it('repeats the last event a week later by default', async () => {
+      adminSock();
+      concludedEvent();
+
+      await handler.handleCommand(createMockMsg('!repeat', true, adminId), mockSock);
+
+      expect(db.getActiveEvent(chatId)?.event_at).toBe('2026-01-19T18:00:00.000Z');
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Padel')
+      }), expect.anything());
+    });
+
+    it('accepts a period and the Spanish alias', async () => {
+      adminSock();
+      concludedEvent();
+
+      await handler.handleCommand(createMockMsg('!repetir 2w', true, adminId), mockSock);
+
+      expect(db.getActiveEvent(chatId)?.event_at).toBe('2026-01-26T18:00:00.000Z');
+    });
+
+    it('shows usage on a bad period', async () => {
+      adminSock();
+      concludedEvent();
+
+      await handler.handleCommand(createMockMsg('!repeat banana', true, adminId), mockSock);
+
+      expect(db.getActiveEvent(chatId)).toBeUndefined();
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('Usage: !repeat')
+      }), expect.anything());
+    });
+
+    it('says so when there is nothing to repeat', async () => {
+      adminSock();
+
+      await handler.handleCommand(createMockMsg('!repeat', true, adminId), mockSock);
+
+      expect(mockSock.sendMessage).toHaveBeenCalledWith(chatId, expect.objectContaining({
+        text: expect.stringContaining('No previous scheduled event')
+      }), expect.anything());
+    });
+  });
+
   describe('!reminders', () => {
     it('should deny non-admin', async () => {
       mockSock.groupMetadata.mockResolvedValue({ participants: [{ id: userId, admin: null }] });

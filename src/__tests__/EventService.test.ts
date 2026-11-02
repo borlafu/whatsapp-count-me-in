@@ -57,6 +57,83 @@ describe('EventService', () => {
     });
   });
 
+  describe('repeatEvent', () => {
+    pinToday();
+
+    const concludedPadel = (eventAt = '2026-01-12T18:00:00.000Z', tz = 'UTC') => {
+      const id = db.createEvent(chatId, 'Padel', 8, true, adminId, eventAt, tz, 60);
+      db.concludeEvent(id);
+    };
+
+    it('copies the last event one week later', () => {
+      concludedPadel();
+
+      const result = service.repeatEvent(chatId, adminId, 7);
+
+      expect(result.success).toBe(true);
+      expect(db.getActiveEvent(chatId)).toMatchObject({
+        title: 'Padel', slots: 8, timezone: 'UTC', close_and_group_offset_min: 60,
+        event_at: '2026-01-19T18:00:00.000Z',
+      });
+    });
+
+    it('honours a custom period', () => {
+      concludedPadel();
+
+      service.repeatEvent(chatId, adminId, 14);
+
+      expect(db.getActiveEvent(chatId)?.event_at).toBe('2026-01-26T18:00:00.000Z');
+    });
+
+    it('repeats a cancelled event too', () => {
+      const id = db.createEvent(chatId, 'Padel', 8, true, adminId, '2026-01-12T18:00:00.000Z', 'UTC');
+      db.cancelEvent(id);
+
+      expect(service.repeatEvent(chatId, adminId, 7).success).toBe(true);
+    });
+
+    it('steps forward by the period when the last event is long past', () => {
+      concludedPadel('2025-12-01T18:00:00.000Z');
+
+      service.repeatEvent(chatId, adminId, 7);
+
+      expect(db.getActiveEvent(chatId)?.event_at).toBe('2026-01-05T18:00:00.000Z');
+    });
+
+    it('starts the copy with nobody signed up', () => {
+      concludedPadel();
+      const oldId = db.getLastEvent(chatId)!.id;
+      db.addParticipant(oldId, user1, 'User1', 'joined');
+
+      service.repeatEvent(chatId, adminId, 7);
+
+      expect(db.getParticipants(db.getActiveEvent(chatId)!.id)).toEqual([]);
+    });
+
+    it('refuses while an event is active', () => {
+      service.createEvent(chatId, 'Padel', 8, adminId, '2026-01-12T18:00:00.000Z', 'UTC');
+
+      expect(service.repeatEvent(chatId, adminId, 7).messageKey).toBe('activeEventExists');
+    });
+
+    it('refuses when the chat has no previous event', () => {
+      expect(service.repeatEvent(chatId, adminId, 7).messageKey).toBe('noEventToRepeat');
+    });
+
+    it('refuses when the previous event had no date', () => {
+      const id = db.createEvent(chatId, 'Padel', 8, true, adminId);
+      db.concludeEvent(id);
+
+      expect(service.repeatEvent(chatId, adminId, 7).messageKey).toBe('noEventToRepeat');
+    });
+
+    it('ignores other chats', () => {
+      concludedPadel();
+
+      expect(service.repeatEvent('other@g.us', adminId, 7).messageKey).toBe('noEventToRepeat');
+    });
+  });
+
   describe('joinEvent', () => {
     it('should allow a user to join an event', () => {
       service.createEvent(chatId, 'Test Event', 2, adminId);

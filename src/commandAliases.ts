@@ -54,6 +54,8 @@ const aliases: Record<string, string> = {
   '!sorteo': 'groups',
   '!reschedule': 'reschedule',
   '!reprogramar': 'reschedule',
+  '!repeat': 'repeat',
+  '!repetir': 'repeat',
   '!reminders': 'reminders',
   '!recordatorios': 'reminders',
 };

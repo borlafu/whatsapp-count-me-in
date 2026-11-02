@@ -191,7 +191,12 @@ export class DatabaseManager {
     return this.db.prepare(`SELECT * FROM events WHERE chat_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`).get(chatId) as WhatsAppEvent | undefined;
   }
 
-  getActiveTimedEvents(): WhatsAppEvent[] {
+  /** Newest event of any status. Ordered by id: created_at only has second resolution. */
+  getLastEvent(chatId: string): WhatsAppEvent | undefined {
+    return this.db.prepare(`SELECT * FROM events WHERE chat_id = ? ORDER BY id DESC LIMIT 1`).get(chatId) as WhatsAppEvent | undefined;
+  }
+
+  getActiveTimedEvents():WhatsAppEvent[] {
     return this.db.prepare(`SELECT * FROM events WHERE status = 'active' AND event_at IS NOT NULL`).all() as WhatsAppEvent[];
   }
 
