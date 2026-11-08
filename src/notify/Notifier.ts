@@ -25,6 +25,11 @@ export interface Alert {
    * update it in place instead of posting again; the rest simply send.
    */
   replaceKey?: string;
+  /**
+   * Text for channels that cannot update a delivery (email): they send a keyed
+   * alert once, with this text and no attachment, and ignore later updates.
+   */
+  brief?: string;
 }
 
 /** Final wording for a keyed alert once the situation it described is over. */

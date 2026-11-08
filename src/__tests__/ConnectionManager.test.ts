@@ -50,7 +50,10 @@ class FakeSocket {
 }
 
 /** Lets tests advance the manager's clock and the timer queue together. */
-function createHarness(options: { createSocket?: () => FakeSocket; phoneNumber?: string } = {}) {
+function createHarness(
+  options: { createSocket?: () => FakeSocket; phoneNumber?: string; creds?: Record<string, unknown> } = {},
+) {
+  const receivedStates: AuthenticationState[] = [];
   const sockets: FakeSocket[] = [];
   const alerts: Alert[] = [];
   let clock = 1_000_000;
@@ -70,10 +73,14 @@ function createHarness(options: { createSocket?: () => FakeSocket; phoneNumber?:
 
   const manager = new ConnectionManager({
     authState: {
-      load: async () => ({ state: {} as AuthenticationState, saveCreds }),
+      load: async () => ({
+        state: { creds: { ...options.creds } } as unknown as AuthenticationState,
+        saveCreds,
+      }),
       wipe,
     },
-    createSocket: () => {
+    createSocket: state => {
+      receivedStates.push(state);
       const sock = options.createSocket ? options.createSocket() : new FakeSocket();
       sockets.push(sock);
       return sock.asWASocket();
@@ -107,7 +114,7 @@ function createHarness(options: { createSocket?: () => FakeSocket; phoneNumber?:
     await flush();
   }
 
-  return { manager, sockets, alerts, resolved, notifier, wipe, onOpen, onClose, wireAppEvents, advance, flush, close, open };
+  return { manager, receivedStates, sockets, alerts, resolved, notifier, wipe, onOpen, onClose, wireAppEvents, advance, flush, close, open };
 }
 
 describe('ConnectionManager', () => {
@@ -132,6 +139,28 @@ describe('ConnectionManager', () => {
       expect(h.wireAppEvents).toHaveBeenCalledTimes(1);
       expect(h.sockets[0]!.ev.count('connection.update')).toBe(1);
       expect(h.sockets[0]!.ev.count('creds.update')).toBe(1);
+    });
+
+    it('drops leftover pairing-code identity so an unregistered session registers again', async () => {
+      const h = createHarness({
+        creds: { registered: false, me: { id: '34600111222@s.whatsapp.net', name: '~' }, pairingCode: 'ABCD1234' },
+      });
+
+      await h.manager.start();
+
+      const creds = (h.receivedStates[0] as unknown as { creds: Record<string, unknown> }).creds;
+      expect(creds['me']).toBeUndefined();
+      expect(creds['pairingCode']).toBeUndefined();
+    });
+
+    it('keeps the identity of a registered session', async () => {
+      const me = { id: '34600111222:1@s.whatsapp.net', name: 'Bot' };
+      const h = createHarness({ creds: { registered: true, me } });
+
+      await h.manager.start();
+
+      const creds = (h.receivedStates[0] as unknown as { creds: Record<string, unknown> }).creds;
+      expect(creds['me']).toEqual(me);
     });
 
     it('retries instead of throwing when the socket cannot be created', async () => {
@@ -299,11 +328,16 @@ describe('ConnectionManager', () => {
       await h.close(h.sockets[0]!, wsError(DisconnectReason.loggedOut, 'Logged out'));
 
       expect(h.wipe).toHaveBeenCalledTimes(1);
-      expect(h.alerts[0]?.subject).toBe('WhatsApp session lost — re-link needed');
       expect(exitSpy).not.toHaveBeenCalled();
 
       await h.advance(0);
       expect(h.sockets).toHaveLength(2);
+
+      // One alert announces the loss: the re-link alert, carrying the reason.
+      h.sockets[1]!.ev.emit('connection.update', { qr: 'qr-1' });
+      await h.advance(0);
+      expect(h.alerts.map(a => a.subject)).toEqual(['WhatsApp re-link required']);
+      expect(h.alerts[0]?.body).toContain('Logged out (status 401)');
     });
 
     it('asks for manual help when the wipe itself fails', async () => {
@@ -506,6 +540,18 @@ describe('ConnectionManager', () => {
       await h.flush();
 
       expect(h.resolved).toEqual(['WhatsApp re-link complete']);
+    });
+
+    it('sends a final back-online message after closing the re-link alert', async () => {
+      const h = createHarness({ phoneNumber: '34600111222' });
+      await h.manager.start();
+      const sock = h.sockets[0]!;
+      await emitQr(h, sock, 'qr-1');
+
+      h.open(sock);
+      await h.flush();
+
+      expect(h.alerts.map(a => a.subject)).toEqual(['WhatsApp re-link required', 'WhatsApp bot back online']);
     });
 
     it('does not close anything when no re-link alert was pushed', async () => {

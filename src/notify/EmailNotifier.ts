@@ -31,31 +31,38 @@ export function createSmtpTransport(config: SmtpConfig): MailTransport {
   });
 }
 
+/**
+ * Email cannot update a message, so a keyed alert (one evolving situation, such
+ * as a pairing window) is mailed once, in its brief form and without media;
+ * later updates for the same key are dropped.
+ */
 export class EmailNotifier implements Notifier {
+  private sentKeys: ReadonlySet<string> = new Set();
+
   constructor(
     private config: SmtpConfig,
     private transport: MailTransport,
   ) {}
 
   async send(alert: Alert): Promise<void> {
+    const { replaceKey } = alert;
+    if (replaceKey !== undefined && this.sentKeys.has(replaceKey)) return;
+    const attachment = replaceKey === undefined ? alert.attachment : undefined;
     try {
       await this.transport.sendMail({
         from: this.config.from,
         to: this.config.to,
         subject: alert.subject,
-        text: alert.body,
-        ...(alert.attachment
+        text: replaceKey === undefined ? alert.body : (alert.brief ?? alert.body),
+        ...(attachment
           ? {
               attachments: [
-                {
-                  filename: alert.attachment.filename,
-                  content: alert.attachment.data,
-                  contentType: alert.attachment.mime,
-                },
+                { filename: attachment.filename, content: attachment.data, contentType: attachment.mime },
               ],
             }
           : {}),
       });
+      if (replaceKey !== undefined) this.sentKeys = new Set([...this.sentKeys, replaceKey]);
     } catch (err) {
       console.error('Email alert failed:', err instanceof Error ? err.message : err);
     }

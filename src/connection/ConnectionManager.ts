@@ -99,6 +99,12 @@ export class ConnectionManager {
 
     try {
       const { state, saveCreds } = await this.deps.authState.load();
+      // requestPairingCode() persists a provisional `me`; if the socket dies before
+      // linking, Baileys would log in with it (401 -> wipe) instead of registering.
+      if (!state.creds.registered && state.creds.me) {
+        delete state.creds.me;
+        state.creds.pairingCode = undefined;
+      }
       const sock = await this.deps.createSocket(state);
       // stop() may have run while the two awaits above were in flight.
       if (this.isStopped) {
@@ -150,14 +156,15 @@ export class ConnectionManager {
     this.resetAttemptCounters();
     this.downSince = null;
     this.hasSentDownAlert = false;
-    void this.pairing.reset('linked');
+    // The final message follows the edit that closes the re-link alert, so it
+    // arrives last (and is the one email an email-only operator gets).
+    void this.pairing.reset('linked').then(hadRelinkAlert => {
+      if (!hadRelinkAlert && !wasReportedDown) return;
+      return this.notify('WhatsApp bot back online', 'The connection was restored. No action needed.');
+    });
 
     console.log('WhatsApp Count Me In is ready!');
     this.deps.onOpen(sock);
-
-    if (wasReportedDown) {
-      void this.notify('WhatsApp bot back online', 'The connection was restored. No action needed.');
-    }
   }
 
   private async handleClose(sock: WASocket, error: unknown): Promise<void> {
@@ -217,19 +224,13 @@ export class ConnectionManager {
 
   /** Wipes unusable credentials and reconnects so a fresh QR / pairing code is issued. */
   private async recoverSession(reason: string): Promise<void> {
-    await this.notify(
-      'WhatsApp session lost — re-link needed',
-      `The session can no longer be used: ${reason}\n\n` +
-        'Credentials are being reset. A pairing code and QR code will follow in a moment.',
-    );
-
     try {
       await this.deps.authState.wipe();
     } catch (err) {
       console.error('Failed to wipe auth state:', err);
       await this.notify(
         'WhatsApp bot needs manual attention',
-        'The stored credentials are unusable but could not be deleted automatically: ' +
+        `The session was lost (${reason}) and the stored credentials could not be deleted automatically: ` +
           `${err instanceof Error ? err.message : String(err)}\n\n` +
           'Delete the auth folder on the server and restart the service.',
       );
@@ -238,7 +239,8 @@ export class ConnectionManager {
     }
 
     this.resetAttemptCounters();
-    await this.pairing.reset('superseded');
+    // The re-link alert itself tells the operator the session was lost and why.
+    await this.pairing.reset('superseded', reason);
     console.log('Credentials wiped. Starting a new pairing session.');
     this.scheduleReconnect(0);
   }
