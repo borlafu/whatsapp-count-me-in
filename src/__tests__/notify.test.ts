@@ -386,6 +386,33 @@ describe('EmailNotifier', () => {
     expect(options).not.toHaveProperty('attachments');
   });
 
+  it('mails a keyed alert once, as its brief and without the QR image', async () => {
+    const transport: MailTransport = { sendMail: vi.fn(async () => ({})) };
+    const notifier = new EmailNotifier(config, transport);
+    const keyed = { ...alertWithPng, replaceKey: 'pairing:1', brief: 'Brief text' };
+
+    await notifier.send(keyed);
+    await notifier.send({ ...keyed, body: 'Newer body' });
+
+    const calls = (transport.sendMail as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]['text']).toBe('Brief text');
+    expect(calls[0]![0]).not.toHaveProperty('attachments');
+  });
+
+  it('mails again for a new key, and retries a key whose send failed', async () => {
+    const sendMail = vi.fn()
+      .mockRejectedValueOnce(new Error('421 try later'))
+      .mockResolvedValue({});
+    const notifier = new EmailNotifier(config, { sendMail });
+
+    await notifier.send({ ...alert, replaceKey: 'pairing:1' });
+    await notifier.send({ ...alert, replaceKey: 'pairing:1' });
+    await notifier.send({ ...alert, replaceKey: 'pairing:2' });
+
+    expect(sendMail).toHaveBeenCalledTimes(3);
+  });
+
   it('logs and swallows SMTP failures', async () => {
     const transport: MailTransport = { sendMail: vi.fn(async () => { throw new Error('535 auth failed'); }) };
 

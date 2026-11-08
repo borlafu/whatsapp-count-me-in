@@ -7,6 +7,12 @@ const QR_PUSH_INTERVAL_MS = 90_000;
 const QR_PNG_SCALE = 8;
 const QR_PNG_MARGIN = 2;
 const ALERT_SUBJECT = 'WhatsApp re-link required';
+/**
+ * How long a socket's pairing code and QR stay usable: Baileys shows the first
+ * QR for 60s and five more for 20s each, then closes with "QR refs attempts
+ * ended". Observed in production as ~160s; not exposed by Baileys.
+ */
+const PAIRING_WINDOW_MS = 160_000;
 
 /** Why a pairing window ended; decides the closing text of the pushed alert. */
 export type PairingOutcome = 'linked' | 'superseded';
@@ -44,6 +50,12 @@ export class Pairing {
   private pairingCode: string | null = null;
   private hasRequestedCode = false;
   private hasCodeRequestFailed = false;
+  /** A code the operator has not been shown yet; bypasses the push throttle. */
+  private hasUnpushedCode = false;
+  /** When the current socket's code and QR stop working; set on its first QR. */
+  private socketExpiresAt: number | null = null;
+  /** Why the session was lost, shown to the operator in the re-link alert. */
+  private lossReason: string | null = null;
 
   constructor(
     private notifier: Notifier,
@@ -55,18 +67,22 @@ export class Pairing {
   /**
    * Ends the current pairing window and starts a new one: forgets the throttle
    * as well as the code, and closes the alert pushed in the old window, if any.
+   * `lossReason` is shown in the new window's alert. Resolves to whether an
+   * alert had been pushed in the window that just ended.
    */
-  async reset(outcome: PairingOutcome): Promise<void> {
+  async reset(outcome: PairingOutcome, lossReason?: string): Promise<boolean> {
     const pushedKey = this.lastPushAt === null ? null : this.replaceKey();
     this.lastPushAt = null;
     this.windowId += 1;
+    this.lossReason = lossReason ?? null;
     this.beginSocketWindow();
-    if (pushedKey === null) return;
+    if (pushedKey === null) return false;
     try {
       await this.notifier.resolve?.(pushedKey, RESOLUTIONS[outcome]);
     } catch (err) {
       console.error('Failed to close the re-link alert:', err);
     }
+    return true;
   }
 
   /**
@@ -78,6 +94,7 @@ export class Pairing {
     this.pairingCode = null;
     this.hasRequestedCode = false;
     this.hasCodeRequestFailed = false;
+    this.socketExpiresAt = null;
   }
 
   async handleQr(qr: string, sock: WASocket): Promise<void> {
@@ -85,18 +102,21 @@ export class Pairing {
     // while this handler is still awaiting. Anything from a stale window must
     // not be pushed, or an already-invalid code lands in a fresh message.
     const windowId = this.windowId;
+    this.socketExpiresAt ??= this.now() + PAIRING_WINDOW_MS;
     await this.requestPairingCodeOnce(sock, windowId);
     if (windowId !== this.windowId) return;
     if (this.shouldPrintQrToTerminal()) await this.printToTerminal(qr);
 
     if (!this.shouldPush()) return;
     this.lastPushAt = this.now();
+    this.hasUnpushedCode = false;
 
     const png = await this.renderPng(qr);
     if (windowId !== this.windowId) return;
     await this.notifier.send({
       subject: ALERT_SUBJECT,
       body: this.buildBody(),
+      brief: this.buildBrief(),
       replaceKey: this.replaceKey(),
       ...(this.pairingCode ? { copyText: this.pairingCode } : {}),
       ...(png ? { attachment: { filename: 'whatsapp-qr.png', mime: 'image/png', data: png } } : {}),
@@ -120,7 +140,7 @@ export class Pairing {
   }
 
   private shouldPush(): boolean {
-    if (this.lastPushAt === null) return true;
+    if (this.lastPushAt === null || this.hasUnpushedCode) return true;
     return this.now() - this.lastPushAt >= QR_PUSH_INTERVAL_MS;
   }
 
@@ -132,6 +152,7 @@ export class Pairing {
           'On your phone: WhatsApp > Settings > Linked devices > Link a device >',
           '"Link with phone number instead", then enter the code above.',
           '',
+          this.validityLine(),
           'The attached QR code is an alternative if the code has expired.',
         ]
       : [
@@ -140,12 +161,37 @@ export class Pairing {
         ];
 
     return [
+      ...this.lossLines(),
       'The bot needs to be linked to your WhatsApp account again.',
       '',
       ...steps,
       '',
       'Codes rotate; this alert is refreshed with the latest code and QR until the bot is linked.',
     ].join('\n');
+  }
+
+  /** For channels that deliver once and cannot be updated (email): no code, it would be stale. */
+  private buildBrief(): string {
+    return [
+      ...this.lossLines(),
+      'The bot must be linked to your WhatsApp account again. Re-link it manually:',
+      'WhatsApp > Settings > Linked devices > Link a device, then either scan the QR code',
+      'or choose "Link with phone number instead" and enter the pairing code.',
+      'Both are delivered to Telegram (if configured) and printed in the server logs;',
+      'they rotate about every 3 minutes.',
+      '',
+      'You will get one more email once the bot is back online.',
+    ].join('\n');
+  }
+
+  private lossLines(): string[] {
+    return this.lossReason ? [`The WhatsApp session was lost: ${this.lossReason}`, ''] : [];
+  }
+
+  private validityLine(): string {
+    if (this.socketExpiresAt === null) return '';
+    const until = new Date(this.socketExpiresAt).toLocaleTimeString('en-GB');
+    return `Valid until about ${until} (server time).\n`;
   }
 
   private async requestPairingCodeOnce(sock: WASocket, windowId: number): Promise<void> {
@@ -155,6 +201,7 @@ export class Pairing {
       const code = await sock.requestPairingCode(this.phoneNumber);
       if (windowId !== this.windowId) return;
       this.pairingCode = code;
+      this.hasUnpushedCode = true;
       console.log('Pairing code requested; delivered via alert channels.');
     } catch (err) {
       this.hasCodeRequestFailed = true;

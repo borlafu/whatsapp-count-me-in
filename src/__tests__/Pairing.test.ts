@@ -49,16 +49,30 @@ describe('Pairing', () => {
     expect(alerts[0]?.body).toContain('Link with phone number instead');
   });
 
-  it('re-requests the code for a new socket but keeps the push throttle', async () => {
+  it('pushes immediately when a new socket issues a new code', async () => {
+    let clock = 0;
+    const pairing = new Pairing(notifier, '34600111222', () => clock);
+    const nextSock = { requestPairingCode: vi.fn(async () => 'WXYZ5678') } as unknown as WASocket;
+
+    await pairing.handleQr('2@abc', sock);
+    clock += 10_000;
+    pairing.beginSocketWindow();
+    await pairing.handleQr('2@def', nextSock);
+
+    expect(alerts).toHaveLength(2);
+    expect(alerts[1]?.body).toContain('Pairing code: WXYZ5678');
+    expect(alerts[1]?.replaceKey).toBe(alerts[0]?.replaceKey);
+  });
+
+  it('keeps the push throttle across QR rotations on the same socket', async () => {
     let clock = 0;
     const pairing = new Pairing(notifier, '34600111222', () => clock);
 
     await pairing.handleQr('2@abc', sock);
     clock += 10_000;
-    pairing.beginSocketWindow();
     await pairing.handleQr('2@def', sock);
 
-    expect(sock.requestPairingCode).toHaveBeenCalledTimes(2);
+    expect(sock.requestPairingCode).toHaveBeenCalledTimes(1);
     expect(alerts).toHaveLength(1);
   });
 
@@ -214,6 +228,46 @@ describe('Pairing', () => {
 
     await pairing.handleQr('2@abc', sock);
 
-    await expect(pairing.reset('linked')).resolves.toBeUndefined();
+    await expect(pairing.reset('linked')).resolves.toBe(true);
+  });
+
+  it('reports whether a re-link alert was pushed in the window that ended', async () => {
+    const pairing = new Pairing(notifier, undefined);
+
+    await expect(pairing.reset('linked')).resolves.toBe(false);
+    await pairing.handleQr('2@abc', sock);
+    await expect(pairing.reset('linked')).resolves.toBe(true);
+  });
+
+  it('states why the session was lost and until when the code is valid', async () => {
+    const clock = new Date('2026-11-08T08:54:24').getTime();
+    const pairing = new Pairing(notifier, '34600111222', () => clock);
+
+    await pairing.reset('superseded', 'Connection Failure (status 401)');
+    await pairing.handleQr('2@abc', sock);
+
+    expect(alerts[0]?.body).toContain('The WhatsApp session was lost: Connection Failure (status 401)');
+    expect(alerts[0]?.body).toContain('Valid until about 08:57:04 (server time).');
+  });
+
+  it('forgets the loss reason once the bot is linked', async () => {
+    const pairing = new Pairing(notifier, undefined);
+    await pairing.reset('superseded', 'Logged out');
+    await pairing.reset('linked');
+
+    await pairing.handleQr('2@abc', sock);
+
+    expect(alerts[0]?.body).not.toContain('session was lost');
+  });
+
+  it('offers a brief for channels that cannot update: manual re-link, no code', async () => {
+    const pairing = new Pairing(notifier, '34600111222');
+
+    await pairing.reset('superseded', 'Logged out');
+    await pairing.handleQr('2@abc', sock);
+
+    expect(alerts[0]?.brief).toContain('Logged out');
+    expect(alerts[0]?.brief).toContain('Link with phone number instead');
+    expect(alerts[0]?.brief).not.toContain('ABCD1234');
   });
 });
