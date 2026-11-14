@@ -18,8 +18,8 @@ importers:
         specifier: ^13.0.3
         version: 13.0.3
       libphonenumber-js:
-        specifier: ^1.13.15
-        version: 1.13.15
+        specifier: ^1.13.16
+        version: 1.13.16
       nodemailer:
         specifier: ^10.3.1
         version: 10.3.1
@@ -908,8 +908,8 @@ packages:
   keyv@5.6.0:
     resolution: {integrity: sha512-CYDD3SOtsHtyXeEORYRx2qBtpDJFjRTGXUtmNEMGyzYOKj1TE3tycdlho7kA1Ufx9OYWZzg52QFBGALTirzDSw==}
 
-  libphonenumber-js@1.13.15:
-    resolution: {integrity: sha512-AHdhEQeDFEJ4GKDAQ9AwxChy+v2kUILUB3TGQRpkXMkWePjXTU/WQEzWVQoIx/Gz8fE73Wr5SEuZCy2vk8jrMQ==}
+  libphonenumber-js@1.13.16:
+    resolution: {integrity: sha512-tIOCM9yx2Go6d5/ZANe0K+G4AZek1Ymx81HxQpf19Sri4zMP95eQbKdnUGHAvFQ4nx0PeLhFqvAfisTADXj3tQ==}
 
   libsignal@6.0.0:
     resolution: {integrity: sha512-d/5V3YFtDljbFMufz4ncyUYGYhJl+vzAe+c2EFFBQ6bz1h8Q3IOMEGXYMzlibU60I+e8GagMMpji18iez3P1hA==}
@@ -1961,7 +1961,7 @@ snapshots:
     dependencies:
       '@keyv/serialize': 1.1.1
 
-  libphonenumber-js@1.13.15: {}
+  libphonenumber-js@1.13.16: {}
 
   libsignal@6.0.0:
     dependencies:
