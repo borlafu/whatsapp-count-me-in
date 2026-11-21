@@ -18,7 +18,7 @@
   "license": "MIT",
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^13.2.0",
     "libphonenumber-js": "^1.13.16",
     "nodemailer": "^10.5.0",
     "pino": "^10.4.0",
